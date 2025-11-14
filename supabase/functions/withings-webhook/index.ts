@@ -83,7 +83,18 @@ Deno.serve(async (req: Request) => {
       (async () => {
         try {
           console.log('=== BACKGROUND PROCESSING START ===');
-          const supabase = createClient(supabaseUrl, supabaseServiceKey);
+          console.log('Initializing Supabase client with SERVICE_ROLE_KEY...');
+          console.log('Service key present:', !!supabaseServiceKey);
+          console.log('Service key length:', supabaseServiceKey?.length || 0);
+          console.log('Service key prefix:', supabaseServiceKey?.substring(0, 20) + '...');
+
+          const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+              detectSessionInUrl: false
+            }
+          });
 
           const { data: tokenData, error: tokenError } = await supabase
             .from('withings_tokens')
