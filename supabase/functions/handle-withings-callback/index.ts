@@ -22,23 +22,27 @@ Deno.serve(async (req: Request) => {
     const error = url.searchParams.get('error');
     const errorDescription = url.searchParams.get('error_description');
 
-    console.log('OAuth callback received:', { code: code ? 'present' : 'missing', state, error });
+    console.log('=== WITHINGS OAUTH CALLBACK START ===');
+    console.log('Callback URL:', req.url);
+    console.log('Code present:', !!code);
+    console.log('State (user_id):', state);
+    console.log('Error:', error);
 
     if (error) {
-      console.error('OAuth error:', error, errorDescription);
+      console.error('OAuth error from Withings:', error, errorDescription);
       const redirectUrl = `${url.origin}/patient/devices?error=${encodeURIComponent(error)}&description=${encodeURIComponent(errorDescription || 'Unknown error')}`;
       return Response.redirect(redirectUrl, 302);
     }
 
     if (!code) {
-      console.error('Missing authorization code');
+      console.error('Missing authorization code in callback');
       const redirectUrl = `${url.origin}/patient/devices?error=missing_code`;
       return Response.redirect(redirectUrl, 302);
     }
 
     const userId = state;
     if (!userId) {
-      console.error('Missing state (user_id)');
+      console.error('Missing state parameter (user_id)');
       const redirectUrl = `${url.origin}/patient/devices?error=missing_state`;
       return Response.redirect(redirectUrl, 302);
     }
@@ -50,13 +54,11 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
 
-    console.log('Token exchange configuration:', {
-      token_url: WITHINGS_TOKEN_URL,
-      grant_type: 'authorization_code',
-      client_id: WITHINGS_CLIENT_ID.substring(0, 10) + '...',
-      redirect_uri: redirectUri,
-      code_present: !!code
-    });
+    console.log('Token exchange configuration:');
+    console.log('  - Token URL:', WITHINGS_TOKEN_URL);
+    console.log('  - Client ID:', WITHINGS_CLIENT_ID.substring(0, 15) + '...');
+    console.log('  - Redirect URI:', redirectUri);
+    console.log('  - User ID:', userId);
 
     const tokenRequestBody = {
       action: 'requesttoken',
@@ -69,7 +71,7 @@ Deno.serve(async (req: Request) => {
 
     const formBody = new URLSearchParams(tokenRequestBody);
 
-    console.log('Sending token exchange request to:', WITHINGS_TOKEN_URL);
+    console.log('Sending token exchange request to Withings...');
     const tokenResponse = await fetch(WITHINGS_TOKEN_URL, {
       method: 'POST',
       headers: {
@@ -78,23 +80,24 @@ Deno.serve(async (req: Request) => {
       body: formBody.toString(),
     });
 
-    console.log('Token response status:', tokenResponse.status, tokenResponse.statusText);
+    console.log('Token response HTTP status:', tokenResponse.status, tokenResponse.statusText);
     const responseText = await tokenResponse.text();
-    console.log('Token response body:', responseText);
+    console.log('Token response body (raw):', responseText);
 
     let tokenData;
     try {
       tokenData = JSON.parse(responseText);
+      console.log('Token response parsed successfully');
+      console.log('Token data status:', tokenData.status);
     } catch (parseError) {
-      console.error('Failed to parse token response:', parseError);
+      console.error('Failed to parse token response as JSON:', parseError);
       const redirectUrl = `${url.origin}/patient/devices?error=invalid_response_format`;
       return Response.redirect(redirectUrl, 302);
     }
 
-    console.log('Token response data:', { status: tokenData.status, hasBody: !!tokenData.body });
-
     if (tokenData.status !== 0) {
-      console.error('Withings token exchange failed:', {
+      console.error('Withings token exchange failed with status:', tokenData.status);
+      console.error('Error details:', {
         status: tokenData.status,
         error: tokenData.error,
         message: tokenData.message || 'Unknown error'
@@ -103,9 +106,22 @@ Deno.serve(async (req: Request) => {
       return Response.redirect(redirectUrl, 302);
     }
 
-    if (!tokenData.body || !tokenData.body.access_token) {
-      console.error('Invalid token response - missing access_token:', tokenData);
+    if (!tokenData.body) {
+      console.error('Token response missing body:', tokenData);
       const redirectUrl = `${url.origin}/patient/devices?error=invalid_token_response`;
+      return Response.redirect(redirectUrl, 302);
+    }
+
+    console.log('=== TOKEN EXCHANGE SUCCESS ===');
+    console.log('Access Token (first 30 chars):', tokenData.body.access_token?.substring(0, 30) + '...');
+    console.log('Refresh Token (first 30 chars):', tokenData.body.refresh_token?.substring(0, 30) + '...');
+    console.log('Withings User ID:', tokenData.body.userid);
+    console.log('Token Expires In (seconds):', tokenData.body.expires_in);
+    console.log('Token Scope:', tokenData.body.scope);
+
+    if (!tokenData.body.access_token || !tokenData.body.refresh_token) {
+      console.error('Missing access_token or refresh_token in response body');
+      const redirectUrl = `${url.origin}/patient/devices?error=missing_tokens`;
       return Response.redirect(redirectUrl, 302);
     }
 
@@ -122,18 +138,29 @@ Deno.serve(async (req: Request) => {
       token_expiry_timestamp: expiryTimestamp,
     };
 
-    console.log('Saving tokens to database for user:', userId);
-    const { error: dbError } = await supabase
+    console.log('=== SAVING TO DATABASE ===');
+    console.log('User ID:', userId);
+    console.log('Withings User ID:', tokenRecord.withings_user_id);
+    console.log('Token Expiry Timestamp:', expiryTimestamp, '(', new Date(expiryTimestamp * 1000).toISOString(), ')');
+
+    const { data: insertData, error: dbError } = await supabase
       .from('withings_tokens')
-      .upsert(tokenRecord, { onConflict: 'user_id' });
+      .upsert(tokenRecord, { onConflict: 'user_id' })
+      .select();
 
     if (dbError) {
-      console.error('Database error:', dbError);
+      console.error('=== DATABASE ERROR ===');
+      console.error('Error code:', dbError.code);
+      console.error('Error message:', dbError.message);
+      console.error('Error details:', dbError.details);
+      console.error('Error hint:', dbError.hint);
       const redirectUrl = `${url.origin}/patient/devices?error=database_error&details=${encodeURIComponent(dbError.message)}`;
       return Response.redirect(redirectUrl, 302);
     }
 
-    console.log('Tokens saved successfully!');
+    console.log('=== DATABASE SAVE SUCCESS ===');
+    console.log('Saved record:', insertData);
+    console.log('Record count:', insertData?.length || 0);
 
     setTimeout(() => {
       (async () => {
@@ -154,11 +181,17 @@ Deno.serve(async (req: Request) => {
     }, 1000);
 
     const redirectUrl = `${url.origin}/patient/devices?withings=connected`;
-    console.log('Redirecting to:', redirectUrl);
+    console.log('=== REDIRECT TO SUCCESS PAGE ===');
+    console.log('Redirect URL:', redirectUrl);
+    console.log('=== WITHINGS OAUTH CALLBACK END ===');
+    
     return Response.redirect(redirectUrl, 302);
 
   } catch (error: any) {
-    console.error('Critical error in OAuth callback:', error);
+    console.error('=== CRITICAL ERROR IN OAUTH CALLBACK ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     const url = new URL(req.url);
     const redirectUrl = `${url.origin}/patient/devices?error=internal_error&message=${encodeURIComponent(error.message)}`;
     return Response.redirect(redirectUrl, 302);
