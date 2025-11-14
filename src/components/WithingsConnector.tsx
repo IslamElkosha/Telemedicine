@@ -17,6 +17,27 @@ const WithingsConnector: React.FC = () => {
   useEffect(() => {
     checkConnection();
     checkForOAuthErrors();
+
+    const { data: { subscription } } = supabase
+      .channel('withings_tokens_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'withings_tokens'
+      }, (payload) => {
+        console.log('Withings tokens changed:', payload);
+        if (payload.eventType === 'DELETE') {
+          setStatus({ connected: false });
+          setError('Connection lost. Please reconnect your Withings device.');
+        } else {
+          checkConnection();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const checkForOAuthErrors = () => {

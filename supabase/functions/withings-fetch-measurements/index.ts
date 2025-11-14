@@ -39,9 +39,18 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
 
     const refreshData = await refreshResponse.json();
     console.log('Token refresh response status:', refreshData.status);
+    console.log('Full refresh response:', JSON.stringify(refreshData, null, 2));
 
     if (refreshData.status !== 0 || !refreshData.body) {
-      console.error('Token refresh failed:', refreshData);
+      console.error('Token refresh failed. Deleting expired tokens from database.');
+      console.error('Error details:', refreshData);
+
+      await supabase
+        .from('withings_tokens')
+        .delete()
+        .eq('user_id', userId);
+
+      console.log('Expired tokens deleted. User must reconnect.');
       return null;
     }
 

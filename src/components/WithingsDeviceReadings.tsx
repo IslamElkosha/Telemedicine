@@ -44,7 +44,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
     const { data: { session } } = supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
 
-      const channel = supabase
+      const vitalsChannel = supabase
         .channel('device_readings_updates')
         .on(
           'postgres_changes',
@@ -61,8 +61,34 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         )
         .subscribe();
 
+      const tokensChannel = supabase
+        .channel('withings_tokens_monitor')
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'withings_tokens',
+            filter: `user_id=eq.${session.user.id}`,
+          },
+          (payload) => {
+            console.log('Withings tokens deleted:', payload);
+            setBpStatus('Disconnected');
+            setThermoStatus('Disconnected');
+            setBpReading(null);
+            setThermoReading(null);
+            setErrors({
+              bp: 'Connection lost. Please reconnect your Withings device on the Devices page.',
+              thermo: 'Connection lost. Please reconnect your Withings device on the Devices page.'
+            });
+            setSubscriptionStatus('idle');
+          }
+        )
+        .subscribe();
+
       return () => {
-        supabase.removeChannel(channel);
+        supabase.removeChannel(vitalsChannel);
+        supabase.removeChannel(tokensChannel);
       };
     });
   }, [userId]);

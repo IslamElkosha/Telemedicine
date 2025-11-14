@@ -39,9 +39,18 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
     });
 
     const refreshData = await refreshResponse.json();
+    console.log('Token refresh response:', JSON.stringify(refreshData, null, 2));
 
     if (refreshData.status !== 0 || !refreshData.body) {
-      console.error('Token refresh failed:', refreshData);
+      console.error('Token refresh failed. Deleting expired tokens from database.');
+      console.error('Error details:', refreshData);
+
+      await supabase
+        .from('withings_tokens')
+        .delete()
+        .eq('user_id', userId);
+
+      console.log('Expired tokens deleted. User must reconnect.');
       return null;
     }
 
@@ -170,6 +179,28 @@ Deno.serve(async (req: Request) => {
 
     if (measureData.status !== 0) {
       console.error('Withings API error:', measureData);
+
+      if (measureData.status === 401) {
+        console.error('Invalid or expired access token (401). Deleting tokens and requiring reconnection.');
+
+        await supabase
+          .from('withings_tokens')
+          .delete()
+          .eq('user_id', user.id);
+
+        console.log('Tokens deleted. User must reconnect via OAuth.');
+
+        return new Response(
+          JSON.stringify({
+            connectionStatus: 'Disconnected',
+            error: 'Token invalid. Please reconnect your Withings device.',
+            needsReconnect: true,
+            tokensDeleted: true
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       return new Response(
         JSON.stringify({
           connectionStatus: 'Disconnected',
