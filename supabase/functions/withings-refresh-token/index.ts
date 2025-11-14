@@ -6,9 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
-const WITHINGS_CLIENT_SECRET = '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
-const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2';
+const WITHINGS_API_BASE = 'https://wbsapi.withings.net';
+const WITHINGS_TOKEN_PATH = '/oauth2/token';
+const WITHINGS_TOKEN_URL = WITHINGS_API_BASE + WITHINGS_TOKEN_PATH;
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -23,6 +23,9 @@ Deno.serve(async (req: Request) => {
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const WITHINGS_CLIENT_ID = Deno.env.get('WITHINGS_CLIENT_ID') || '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
+    const WITHINGS_CLIENT_SECRET = Deno.env.get('WITHINGS_CLIENT_SECRET') || '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -42,7 +45,7 @@ Deno.serve(async (req: Request) => {
       .from('withings_tokens')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (tokenError || !tokenData) {
       return new Response(
@@ -50,6 +53,8 @@ Deno.serve(async (req: Request) => {
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('Refreshing token for user:', user.id);
 
     const refreshParams = new URLSearchParams({
       action: 'requesttoken',
@@ -59,6 +64,7 @@ Deno.serve(async (req: Request) => {
       refresh_token: tokenData.refresh_token,
     });
 
+    console.log('Sending refresh request to:', WITHINGS_TOKEN_URL);
     const refreshResponse = await fetch(WITHINGS_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -66,6 +72,7 @@ Deno.serve(async (req: Request) => {
     });
 
     const refreshData = await refreshResponse.json();
+    console.log('Refresh response status:', refreshData.status);
 
     if (refreshData.status !== 0) {
       console.error('Withings refresh error:', refreshData);
@@ -75,7 +82,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const expiresIn = refreshData.body.expires_in;
+    const expiresIn = refreshData.body.expires_in || 10800;
     const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
 
     const { error: updateError } = await supabase
@@ -94,6 +101,8 @@ Deno.serve(async (req: Request) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('Token refreshed successfully for user:', user.id);
 
     return new Response(
       JSON.stringify({ success: true, message: 'Token refreshed successfully' }),

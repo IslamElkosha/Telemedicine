@@ -6,6 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
+const WITHINGS_API_BASE = 'https://wbsapi.withings.net';
+const WITHINGS_TOKEN_PATH = '/oauth2/token';
+const WITHINGS_TOKEN_URL = WITHINGS_API_BASE + WITHINGS_TOKEN_PATH;
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -41,14 +45,13 @@ Deno.serve(async (req: Request) => {
 
     const WITHINGS_CLIENT_ID = Deno.env.get('WITHINGS_CLIENT_ID') || '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
     const WITHINGS_CLIENT_SECRET = Deno.env.get('WITHINGS_CLIENT_SECRET') || '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
-    const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2';
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
 
-    console.log('Token exchange parameters:', {
-      action: 'requesttoken',
+    console.log('Token exchange configuration:', {
+      token_url: WITHINGS_TOKEN_URL,
       grant_type: 'authorization_code',
       client_id: WITHINGS_CLIENT_ID.substring(0, 10) + '...',
       redirect_uri: redirectUri,
@@ -66,7 +69,7 @@ Deno.serve(async (req: Request) => {
 
     const formBody = new URLSearchParams(tokenRequestBody);
 
-    console.log('Sending token exchange request to Withings...');
+    console.log('Sending token exchange request to:', WITHINGS_TOKEN_URL);
     const tokenResponse = await fetch(WITHINGS_TOKEN_URL, {
       method: 'POST',
       headers: {
@@ -76,7 +79,18 @@ Deno.serve(async (req: Request) => {
     });
 
     console.log('Token response status:', tokenResponse.status, tokenResponse.statusText);
-    const tokenData = await tokenResponse.json();
+    const responseText = await tokenResponse.text();
+    console.log('Token response body:', responseText);
+
+    let tokenData;
+    try {
+      tokenData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse token response:', parseError);
+      const redirectUrl = `${url.origin}/patient/devices?error=invalid_response_format`;
+      return Response.redirect(redirectUrl, 302);
+    }
+
     console.log('Token response data:', { status: tokenData.status, hasBody: !!tokenData.body });
 
     if (tokenData.status !== 0) {
