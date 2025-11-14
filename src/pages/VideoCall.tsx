@@ -41,6 +41,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import DeviceReadings from '../components/DeviceReadings';
+import VitalsPanel from '../components/VitalsPanel';
 
 const VideoCall: React.FC = () => {
   const { appointmentId } = useParams<{ appointmentId: string }>();
@@ -1120,7 +1121,14 @@ const VideoCall: React.FC = () => {
           <div className="flex-1 overflow-y-auto">
             {showDevices && (
               <div className="p-4 space-y-4">
-                <h3 className="font-semibold text-gray-900 mb-4">Live Readings & Device Feeds</h3>
+                <VitalsPanel
+                  patientId={appointment?.patientId}
+                  autoRefresh={true}
+                  refreshInterval={15000}
+                  compact={false}
+                />
+
+                <h3 className="font-semibold text-gray-900 mb-4 mt-6">Other Medical Device Feeds</h3>
                 
                 {/* Connected Device Feeds */}
                 {Object.entries(connectedDevices).map(([deviceId, deviceData]) => {

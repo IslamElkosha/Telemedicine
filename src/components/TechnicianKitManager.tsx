@@ -32,6 +32,7 @@ import {
   Power,
   Gauge
 } from 'lucide-react';
+import WithingsKitDevices from './WithingsKitDevices';
 
 const TechnicianKitManager: React.FC = () => {
   const { 
@@ -408,6 +409,8 @@ const TechnicianKitManager: React.FC = () => {
           <BackButton fallbackPath="/technician" />
         </div>
       </div>
+
+      <WithingsKitDevices compact={false} />
 
       {/* Device Status Overview */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
