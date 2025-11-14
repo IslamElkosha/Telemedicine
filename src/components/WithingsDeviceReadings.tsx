@@ -137,23 +137,47 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         return;
       }
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: tokenData } = await supabase
+        .from('withings_tokens')
+        .select('*')
+        .eq('user_id', userId || session.user.id)
+        .maybeSingle();
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-latest-bp-reading`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      if (!tokenData) {
+        setBpStatus('Disconnected');
+        setErrors(prev => ({ ...prev, bp: 'No Withings connection found' }));
+        return;
+      }
 
-      const result = await response.json();
+      const { data: measurements, error } = await supabase
+        .from('withings_measurements')
+        .select('*')
+        .eq('user_id', userId || session.user.id)
+        .eq('measurement_type', 'blood_pressure')
+        .order('measured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      setBpStatus(result.connectionStatus);
+      if (error) {
+        console.error('Error fetching BP from database:', error);
+        setBpStatus('Disconnected');
+        setErrors(prev => ({ ...prev, bp: 'Failed to load data' }));
+        return;
+      }
 
-      if (result.success && result.data) {
-        setBpReading(result.data);
-      } else if (result.error) {
-        setErrors(prev => ({ ...prev, bp: result.error }));
+      if (measurements) {
+        setBpStatus('Connected');
+        setBpReading({
+          systolic: measurements.systolic,
+          diastolic: measurements.diastolic,
+          heartRate: measurements.heart_rate,
+          measuredAt: measurements.measured_at,
+          deviceModel: measurements.device_model || 'BPM Connect',
+          connectionStatus: 'Connected',
+        });
+      } else {
+        setBpStatus('Connected');
+        setErrors(prev => ({ ...prev, bp: 'No readings available yet' }));
       }
     } catch (error: any) {
       console.error('Error fetching BP reading:', error);
@@ -175,23 +199,45 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         return;
       }
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: tokenData } = await supabase
+        .from('withings_tokens')
+        .select('*')
+        .eq('user_id', userId || session.user.id)
+        .maybeSingle();
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-latest-thermo-data`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      if (!tokenData) {
+        setThermoStatus('Disconnected');
+        setErrors(prev => ({ ...prev, thermo: 'No Withings connection found' }));
+        return;
+      }
 
-      const result = await response.json();
+      const { data: measurements, error } = await supabase
+        .from('withings_measurements')
+        .select('*')
+        .eq('user_id', userId || session.user.id)
+        .eq('measurement_type', 'temperature')
+        .order('measured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      setThermoStatus(result.connectionStatus);
+      if (error) {
+        console.error('Error fetching temperature from database:', error);
+        setThermoStatus('Disconnected');
+        setErrors(prev => ({ ...prev, thermo: 'Failed to load data' }));
+        return;
+      }
 
-      if (result.success && result.data) {
-        setThermoReading(result.data);
-      } else if (result.error) {
-        setErrors(prev => ({ ...prev, thermo: result.error }));
+      setThermoStatus('Connected');
+
+      if (measurements) {
+        setThermoReading({
+          temperature: measurements.temperature,
+          measuredAt: measurements.measured_at,
+          deviceModel: measurements.device_model || 'Thermo',
+          connectionStatus: 'Connected',
+        });
+      } else {
+        setErrors(prev => ({ ...prev, thermo: 'No readings available yet' }));
       }
     } catch (error: any) {
       console.error('Error fetching temperature reading:', error);

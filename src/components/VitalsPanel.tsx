@@ -86,20 +86,31 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: measurements, error } = await supabase
+        .from('withings_measurements')
+        .select('*')
+        .eq('user_id', patientId || session.user.id)
+        .eq('measurement_type', 'blood_pressure')
+        .order('measured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-latest-bp-reading`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      if (error) {
+        console.error('Error fetching BP from database:', error);
+        return;
+      }
 
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        setBpReading(result.data);
-        checkTriageStatus(result.data, thermoReading);
+      if (measurements) {
+        const bpData: BPReading = {
+          systolic: measurements.systolic,
+          diastolic: measurements.diastolic,
+          heartRate: measurements.heart_rate,
+          measuredAt: measurements.measured_at,
+          deviceModel: measurements.device_model || 'BPM Connect',
+          connectionStatus: 'Connected',
+        };
+        setBpReading(bpData);
+        checkTriageStatus(bpData, thermoReading);
       }
     } catch (error) {
       console.error('Error fetching BP reading:', error);
@@ -111,20 +122,29 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: measurements, error } = await supabase
+        .from('withings_measurements')
+        .select('*')
+        .eq('user_id', patientId || session.user.id)
+        .eq('measurement_type', 'temperature')
+        .order('measured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-latest-thermo-data`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      if (error) {
+        console.error('Error fetching temperature from database:', error);
+        return;
+      }
 
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        setThermoReading(result.data);
-        checkTriageStatus(bpReading, result.data);
+      if (measurements) {
+        const thermoData: ThermoReading = {
+          temperature: measurements.temperature,
+          measuredAt: measurements.measured_at,
+          deviceModel: measurements.device_model || 'Thermo',
+          connectionStatus: 'Connected',
+        };
+        setThermoReading(thermoData);
+        checkTriageStatus(bpReading, thermoData);
       }
     } catch (error) {
       console.error('Error fetching temperature reading:', error);
