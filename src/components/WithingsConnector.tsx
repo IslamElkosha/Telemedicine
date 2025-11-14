@@ -81,6 +81,22 @@ const WithingsConnector: React.FC = () => {
       if (error || !tokenData) {
         setStatus({ connected: false });
       } else {
+        const currentTime = Math.floor(Date.now() / 1000);
+        const tokenValidForSeconds = tokenData.token_expiry_timestamp - currentTime;
+
+        if (tokenValidForSeconds < 0) {
+          console.warn('Token expired! Seconds since expiry:', Math.abs(tokenValidForSeconds));
+          setStatus({ connected: false });
+          setError('Connection expired. Please reconnect your Withings device.');
+
+          await supabase
+            .from('withings_tokens')
+            .delete()
+            .eq('user_id', session.user.id);
+
+          return;
+        }
+
         const { data: measurements } = await supabase
           .from('withings_measurements')
           .select('device_model, measured_at')
@@ -117,8 +133,9 @@ const WithingsConnector: React.FC = () => {
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/start-withings-auth`, {
-        method: 'GET',
+      console.log('Initiating force relink to clear any expired tokens...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
@@ -131,6 +148,7 @@ const WithingsConnector: React.FC = () => {
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
+      console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
       window.location.href = result.authUrl;
     } catch (err: any) {
       console.error('Error initiating OAuth:', err);
