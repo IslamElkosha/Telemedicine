@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import BackButton from '../components/BackButton';
 import WithingsConnector from '../components/WithingsConnector';
 import WithingsMeasurements from '../components/WithingsMeasurements';
+import WithingsDeviceReadings from '../components/WithingsDeviceReadings';
 import { 
   Activity, 
   Bluetooth, 
@@ -395,6 +396,8 @@ const PatientDevicesPage: React.FC = () => {
           {/* Device List */}
           <div className="lg:col-span-2 space-y-6">
             <WithingsConnector />
+
+            <WithingsDeviceReadings showRefresh={true} />
 
             <WithingsMeasurements showHeader={true} maxItems={5} />
 
