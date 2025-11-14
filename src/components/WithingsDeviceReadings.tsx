@@ -31,10 +31,95 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState<{ bp: boolean; thermo: boolean }>({ bp: false, thermo: false });
   const [errors, setErrors] = useState<{ bp?: string; thermo?: string }>({});
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'idle' | 'subscribed' | 'error'>('idle');
 
   useEffect(() => {
     loadReadings();
+    checkSubscriptionStatus();
+
+    const { data: { session } } = supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+
+      const channel = supabase
+        .channel('device_readings_updates')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'withings_measurements',
+            filter: `user_id=eq.${session.user.id}`,
+          },
+          (payload) => {
+            console.log('Real-time measurement update received:', payload);
+            loadReadings();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    });
   }, [userId]);
+
+  const checkSubscriptionStatus = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data } = await supabase
+        .from('withings_tokens')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (data) {
+        setSubscriptionStatus('subscribed');
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+    }
+  };
+
+  const subscribeToNotifications = async () => {
+    try {
+      setSubscribing(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Please log in to enable notifications');
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+      console.log('Subscribing to Withings notifications...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/subscribe-withings-notify`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.success || result.alreadySubscribed) {
+        setSubscriptionStatus('subscribed');
+        alert('Real-time notifications enabled! New readings will appear automatically.');
+      } else {
+        setSubscriptionStatus('error');
+        alert(`Failed to enable notifications: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error('Error subscribing to notifications:', error);
+      setSubscriptionStatus('error');
+      alert(`Error: ${error.message}`);
+    } finally {
+      setSubscribing(false);
+    }
+  };
 
   const loadReadings = async () => {
     await Promise.all([fetchBPReading(), fetchThermoReading()]);
@@ -155,6 +240,47 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
   return (
     <div className="space-y-4">
+      {subscriptionStatus !== 'subscribed' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-blue-900 mb-1">Enable Real-Time Updates</h4>
+              <p className="text-sm text-blue-700 mb-3">
+                Stop manual refreshing! Click below to enable automatic updates when new measurements are taken.
+              </p>
+              <button
+                onClick={subscribeToNotifications}
+                disabled={subscribing}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {subscribing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Enabling...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Enable Real-Time Notifications
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {subscriptionStatus === 'subscribed' && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+          <div className="flex items-center">
+            <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+            <div>
+              <h4 className="font-semibold text-green-900">Real-Time Updates Active</h4>
+              <p className="text-sm text-green-700">New measurements will appear automatically</p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className={`bg-white rounded-xl border p-6 transition-all ${getStatusColor(bpStatus)}`}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center space-x-3">
