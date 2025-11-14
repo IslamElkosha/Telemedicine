@@ -18,6 +18,7 @@ import PaymentPage from './pages/PaymentPage';
 import MedicalRecordsPage from './pages/MedicalRecordsPage';
 import PatientDevicesPage from './pages/PatientDevicesPage';
 import DiagnosticsPage from './pages/DiagnosticsPage';
+import PatientWithingsDataPage from './pages/PatientWithingsDataPage';
 
 function App() {
   return (
@@ -42,6 +43,9 @@ function App() {
                   <Route path="/patient/medical-records" element={<MedicalRecordsPage />} />
                   <Route path="/patient/devices" element={<PatientDevicesPage />} />
                   <Route path="/diagnostics" element={<DiagnosticsPage />} />
+                  <Route path="/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
+                  <Route path="/doctor/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
+                  <Route path="/technician/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
                 </Routes>
               </div>
             </Router>
