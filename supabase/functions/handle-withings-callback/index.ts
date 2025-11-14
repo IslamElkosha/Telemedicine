@@ -125,7 +125,13 @@ Deno.serve(async (req: Request) => {
       return Response.redirect(redirectUrl, 302);
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      }
+    });
 
     const expiresIn = tokenData.body.expires_in || 10800;
     const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;

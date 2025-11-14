@@ -222,7 +222,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
       if (!tokenData) {
         setBpStatus('Disconnected');
-        setErrors(prev => ({ ...prev, bp: 'No Withings connection found' }));
+        setErrors(prev => ({ ...prev, bp: 'Withings connection expired. Please reconnect your devices on the Devices page.' }));
         return;
       }
 
@@ -282,7 +282,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
       if (!tokenData) {
         setThermoStatus('Disconnected');
-        setErrors(prev => ({ ...prev, thermo: 'No Withings connection found' }));
+        setErrors(prev => ({ ...prev, thermo: 'Withings connection expired. Please reconnect your devices on the Devices page.' }));
         return;
       }
 
