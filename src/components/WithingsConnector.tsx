@@ -16,7 +16,30 @@ const WithingsConnector: React.FC = () => {
 
   useEffect(() => {
     checkConnection();
+    checkForOAuthErrors();
   }, []);
+
+  const checkForOAuthErrors = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const oauthError = urlParams.get('error');
+    const errorDescription = urlParams.get('description');
+
+    if (oauthError) {
+      if (oauthError === 'missing_code') {
+        setError('Authorization code not received from Withings');
+      } else if (oauthError === 'token_exchange_failed') {
+        setError('Failed to exchange authorization code for access token');
+      } else if (oauthError === 'database_error') {
+        setError('Failed to save tokens to database');
+      } else {
+        setError(errorDescription || `OAuth error: ${oauthError}`);
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (urlParams.get('withings') === 'connected') {
+      checkConnection();
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  };
 
   const checkConnection = async () => {
     try {
@@ -64,6 +87,7 @@ const WithingsConnector: React.FC = () => {
 
   const handleConnect = async () => {
     try {
+      setError(null);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setError('Please log in to connect Withings devices');
@@ -71,14 +95,23 @@ const WithingsConnector: React.FC = () => {
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const clientId = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
-      const redirectUri = `${supabaseUrl}/functions/v1/withings-oauth-callback`;
-      const state = session.user.id;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const scope = 'user.metrics';
-      const authUrl = `https://account.withings.com/oauth2_user/authorize2?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=${scope}`;
+      const response = await fetch(`${supabaseUrl}/functions/v1/start-withings-auth`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${anonKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-      window.location.href = authUrl;
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to generate authorization URL');
+      }
+
+      window.location.href = result.authUrl;
     } catch (err: any) {
       console.error('Error initiating OAuth:', err);
       setError(err.message);
