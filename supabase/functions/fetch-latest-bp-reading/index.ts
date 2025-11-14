@@ -36,6 +36,7 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
       grant_type: 'refresh_token',
       client_id: WITHINGS_CLIENT_ID,
       client_secret: WITHINGS_CLIENT_SECRET,
+      redirect_uri: redirectUri,
       refresh_token: refreshToken,
     });
 
@@ -45,6 +46,7 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
       grant_type: 'refresh_token',
       client_id: WITHINGS_CLIENT_ID,
       client_secret: WITHINGS_CLIENT_SECRET.substring(0, 10) + '...',
+      redirect_uri: redirectUri,
       refresh_token: refreshToken.substring(0, 20) + '...',
     });
 

@@ -62,15 +62,27 @@ Deno.serve(async (req: Request) => {
 
     console.log('Refreshing token for user:', user.id);
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
+
     const refreshParams = new URLSearchParams({
       action: 'requesttoken',
       grant_type: 'refresh_token',
       client_id: WITHINGS_CLIENT_ID,
       client_secret: WITHINGS_CLIENT_SECRET,
+      redirect_uri: redirectUri,
       refresh_token: tokenData.refresh_token,
     });
 
     console.log('Sending refresh request to:', WITHINGS_TOKEN_URL);
+    console.log('Refresh parameters:', {
+      action: 'requesttoken',
+      grant_type: 'refresh_token',
+      client_id: WITHINGS_CLIENT_ID,
+      client_secret: WITHINGS_CLIENT_SECRET.substring(0, 10) + '...',
+      redirect_uri: redirectUri,
+      refresh_token: tokenData.refresh_token.substring(0, 20) + '...',
+    });
     const refreshResponse = await fetch(WITHINGS_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
