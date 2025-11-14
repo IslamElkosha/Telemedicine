@@ -62,6 +62,7 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
       if (tokenData) {
         setHasConnection(true);
+        subscribeToNotifications();
 
         const { data: bpMeasurements } = await supabase
           .from('withings_measurements')
@@ -139,6 +140,34 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
     } catch (error: any) {
       console.error('Error linking device:', error);
       alert(`Failed to link device: ${error.message}`);
+    }
+  };
+
+  const subscribeToNotifications = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+      console.log('Subscribing to Withings notifications...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/subscribe-withings-notify`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.success || result.alreadySubscribed) {
+        console.log('Webhook notifications enabled:', result.message);
+      } else {
+        console.error('Failed to subscribe to notifications:', result.error);
+      }
+    } catch (error: any) {
+      console.error('Error subscribing to notifications:', error);
     }
   };
 

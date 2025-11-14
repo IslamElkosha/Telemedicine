@@ -1124,7 +1124,6 @@ const VideoCall: React.FC = () => {
                 <VitalsPanel
                   patientId={appointment?.patientId}
                   autoRefresh={true}
-                  refreshInterval={90000}
                   compact={false}
                 />
 

@@ -42,9 +42,30 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
     fetchVitals();
 
     if (autoRefresh) {
-      intervalRef.current = setInterval(() => {
-        fetchVitals();
-      }, refreshInterval);
+      const { data: { session } } = supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) return;
+
+        const channel = supabase
+          .channel('withings_measurements_changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'withings_measurements',
+              filter: `user_id=eq.${session.user.id}`,
+            },
+            (payload) => {
+              console.log('Real-time measurement update received:', payload);
+              fetchVitals();
+            }
+          )
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(channel);
+        };
+      });
     }
 
     return () => {
@@ -52,7 +73,7 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
         clearInterval(intervalRef.current);
       }
     };
-  }, [patientId, autoRefresh, refreshInterval]);
+  }, [patientId, autoRefresh]);
 
   const fetchVitals = async () => {
     await Promise.all([fetchBPReading(), fetchThermoReading()]);
@@ -247,7 +268,7 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
         </div>
         {lastUpdate && (
           <p className="text-xs text-gray-500 mt-1">
-            Auto-refreshing every {refreshInterval / 1000}s • Last update: {lastUpdate.toLocaleTimeString()}
+            Real-time updates enabled • Last update: {lastUpdate.toLocaleTimeString()}
           </p>
         )}
       </div>
