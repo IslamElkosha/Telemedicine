@@ -88,9 +88,12 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
 
       const { data: vitals, error } = await supabase
         .from('user_vitals_live')
-        .select('*')
+        .select('systolic_bp, diastolic_bp, heart_rate, timestamp, device_type')
         .eq('user_id', patientId || session.user.id)
-        .eq('device_type', 'BPM_CONNECT')
+        .not('systolic_bp', 'is', null)
+        .not('diastolic_bp', 'is', null)
+        .order('timestamp', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (error) {
@@ -98,17 +101,21 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
         return;
       }
 
-      if (vitals) {
+      if (vitals && vitals.systolic_bp && vitals.diastolic_bp) {
+        console.log('BP data fetched from database:', vitals);
         const bpData: BPReading = {
           systolic: vitals.systolic_bp,
           diastolic: vitals.diastolic_bp,
-          heartRate: vitals.heart_rate,
+          heartRate: vitals.heart_rate || undefined,
           measuredAt: vitals.timestamp,
           deviceModel: 'BPM Connect',
           connectionStatus: 'Connected',
         };
         setBpReading(bpData);
         checkTriageStatus(bpData, thermoReading);
+      } else {
+        console.log('No BP data found in database');
+        setBpReading(null);
       }
     } catch (error) {
       console.error('Error fetching BP reading:', error);
