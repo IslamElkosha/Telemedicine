@@ -324,6 +324,24 @@ Deno.serve(async (req: Request) => {
       console.log('Measurement saved to database successfully');
     }
 
+    console.log('Updating user_vitals_live table...');
+    const { error: liveError } = await supabase
+      .from('user_vitals_live')
+      .upsert({
+        user_id: user.id,
+        device_type: 'BPM_CONNECT',
+        systolic_bp: reading.systolic,
+        diastolic_bp: reading.diastolic,
+        heart_rate: reading.heartRate,
+        timestamp: reading.measuredAt,
+      }, { onConflict: 'user_id,device_type' });
+
+    if (liveError) {
+      console.error('Error updating user_vitals_live:', liveError);
+    } else {
+      console.log('user_vitals_live updated successfully');
+    }
+
     console.log('=== FETCH LATEST BP READING END - SUCCESS ===');
     
     return new Response(

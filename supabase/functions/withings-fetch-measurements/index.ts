@@ -7,11 +7,67 @@ const corsHeaders = {
 };
 
 const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/measure';
+const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/oauth2/token';
 
 interface MeasureType {
   type: number;
   field: string;
   measurementType: string;
+}
+
+async function refreshAccessToken(supabase: any, userId: string, refreshToken: string): Promise<string | null> {
+  try {
+    console.log('=== REFRESHING ACCESS TOKEN ===');
+
+    const WITHINGS_CLIENT_ID = Deno.env.get('WITHINGS_CLIENT_ID') || '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
+    const WITHINGS_CLIENT_SECRET = Deno.env.get('WITHINGS_CLIENT_SECRET') || '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
+
+    const refreshParams = new URLSearchParams({
+      action: 'requesttoken',
+      grant_type: 'refresh_token',
+      client_id: WITHINGS_CLIENT_ID,
+      client_secret: WITHINGS_CLIENT_SECRET,
+      refresh_token: refreshToken,
+    });
+
+    console.log('Sending token refresh request');
+    const refreshResponse = await fetch(WITHINGS_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: refreshParams.toString(),
+    });
+
+    const refreshData = await refreshResponse.json();
+    console.log('Token refresh response status:', refreshData.status);
+
+    if (refreshData.status !== 0 || !refreshData.body) {
+      console.error('Token refresh failed:', refreshData);
+      return null;
+    }
+
+    const expiresIn = refreshData.body.expires_in || 10800;
+    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
+
+    const { error: updateError } = await supabase
+      .from('withings_tokens')
+      .update({
+        access_token: refreshData.body.access_token,
+        refresh_token: refreshData.body.refresh_token,
+        token_expiry_timestamp: expiryTimestamp,
+      })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Failed to update token in database:', updateError);
+      return null;
+    }
+
+    console.log('Token refreshed and updated successfully');
+    return refreshData.body.access_token;
+  } catch (error: any) {
+    console.error('Error refreshing token:', error);
+    return null;
+  }
 }
 
 const MEASURE_TYPES: MeasureType[] = [
@@ -70,12 +126,27 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    let accessToken = tokenData.access_token;
     const now = Math.floor(Date.now() / 1000);
-    if (tokenData.token_expiry_timestamp <= now) {
-      return new Response(
-        JSON.stringify({ error: 'Token expired', needsRefresh: true }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const bufferTime = 300;
+
+    if (tokenData.token_expiry_timestamp <= (now + bufferTime)) {
+      console.log('Token expired or expiring soon. Attempting to refresh...');
+
+      const newAccessToken = await refreshAccessToken(supabase, user.id, tokenData.refresh_token);
+
+      if (!newAccessToken) {
+        console.error('Failed to refresh token');
+        return new Response(
+          JSON.stringify({ error: 'Token expired and refresh failed. Please reconnect your device.', needsRefresh: true }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      accessToken = newAccessToken;
+      console.log('Using newly refreshed token');
+    } else {
+      console.log('Token is still valid');
     }
 
     const url = new URL(req.url);
@@ -88,7 +159,7 @@ Deno.serve(async (req: Request) => {
 
     const measureResponse = await fetch(`${WITHINGS_MEASURE_URL}?${measureParams.toString()}`, {
       headers: {
-        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
     });
 
@@ -160,6 +231,48 @@ Deno.serve(async (req: Request) => {
           JSON.stringify({ error: 'Failed to store measurements', details: insertError }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      const latestBP = measurements
+        .filter(m => m.measurement_type === 'blood_pressure' && m.systolic && m.diastolic)
+        .sort((a, b) => new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime())[0];
+
+      const latestTemp = measurements
+        .filter(m => m.measurement_type === 'temperature' && m.temperature)
+        .sort((a, b) => new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime())[0];
+
+      if (latestBP) {
+        console.log('Updating user_vitals_live with latest BP');
+        const { error: bpError } = await supabase
+          .from('user_vitals_live')
+          .upsert({
+            user_id: user.id,
+            device_type: 'BPM_CONNECT',
+            systolic_bp: latestBP.systolic,
+            diastolic_bp: latestBP.diastolic,
+            heart_rate: latestBP.heart_rate,
+            timestamp: latestBP.measured_at,
+          }, { onConflict: 'user_id,device_type' });
+
+        if (bpError) {
+          console.error('Error updating user_vitals_live BP:', bpError);
+        }
+      }
+
+      if (latestTemp) {
+        console.log('Updating user_vitals_live with latest temperature');
+        const { error: tempError } = await supabase
+          .from('user_vitals_live')
+          .upsert({
+            user_id: user.id,
+            device_type: 'THERMO',
+            temperature_c: latestTemp.temperature,
+            timestamp: latestTemp.measured_at,
+          }, { onConflict: 'user_id,device_type' });
+
+        if (tempError) {
+          console.error('Error updating user_vitals_live temperature:', tempError);
+        }
       }
     }
 
