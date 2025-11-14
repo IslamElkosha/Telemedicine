@@ -59,8 +59,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('Found token for Withings User ID:', tokenData.withings_user_id);
 
-    const callbackUrl = 'https://comprehensive-teleme-pbkl.bolt.host/withings/data/webhook';
-    const callbackName = 'bolt-telehealth-bp-temp';
+    const callbackUrl = `${supabaseUrl}/functions/v1/withings-webhook`;
     const appli = 1;
 
     const subscribeParams = new URLSearchParams({
@@ -71,14 +70,16 @@ Deno.serve(async (req: Request) => {
 
     console.log('Subscribing to Withings notifications:');
     console.log('  - Callback URL:', callbackUrl);
-    console.log('  - Application:', appli, '(health measurements)');
+    console.log('  - Application:', appli, '(health measurements: BP, temp, weight, HR)');
     console.log('  - Access Token (first 30 chars):', tokenData.access_token.substring(0, 30) + '...');
+    console.log('  - Subscription URL:', `${WITHINGS_NOTIFY_URL}?${subscribeParams.toString()}`);
 
-    const subscribeUrl = `${WITHINGS_NOTIFY_URL}?${subscribeParams.toString()}`;
-    const subscribeResponse = await fetch(subscribeUrl, {
+    console.log('Sending POST request to Withings API...');
+    const subscribeResponse = await fetch(`${WITHINGS_NOTIFY_URL}?${subscribeParams.toString()}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
     });
 
