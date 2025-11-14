@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Thermometer, Activity, RefreshCw, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Heart, Thermometer, Activity, RefreshCw, CheckCircle, XCircle, AlertCircle, Bug } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface BPReading {
@@ -33,6 +33,8 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
   const [errors, setErrors] = useState<{ bp?: string; thermo?: string }>({});
   const [subscribing, setSubscribing] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<'idle' | 'subscribed' | 'error'>('idle');
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [debugData, setDebugData] = useState<any>(null);
 
   useEffect(() => {
     loadReadings();
@@ -124,6 +126,45 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
   const loadReadings = async () => {
     await Promise.all([fetchBPReading(), fetchThermoReading()]);
     setLoading(false);
+  };
+
+  const debugWithingsAPI = async () => {
+    try {
+      setDebugLoading(true);
+      setDebugData(null);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Not authenticated');
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/debug-withings-data-pull`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+      setDebugData(result);
+
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write('<html><head><title>Withings API Debug</title></head><body>');
+        newWindow.document.write('<pre style="font-family: monospace; padding: 20px; background: #f5f5f5;">');
+        newWindow.document.write(JSON.stringify(result, null, 2));
+        newWindow.document.write('</pre></body></html>');
+        newWindow.document.close();
+      }
+    } catch (error: any) {
+      console.error('Debug error:', error);
+      alert(`Debug error: ${error.message}`);
+    } finally {
+      setDebugLoading(false);
+    }
   };
 
   const fetchBPReading = async () => {
@@ -314,12 +355,31 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       )}
       {subscriptionStatus === 'subscribed' && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <div className="flex items-center">
-            <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-            <div>
-              <h4 className="font-semibold text-green-900">Real-Time Updates Active</h4>
-              <p className="text-sm text-green-700">New measurements will appear automatically</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+              <div>
+                <h4 className="font-semibold text-green-900">Real-Time Updates Active</h4>
+                <p className="text-sm text-green-700">New measurements will appear automatically</p>
+              </div>
             </div>
+            <button
+              onClick={debugWithingsAPI}
+              disabled={debugLoading}
+              className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center text-sm"
+            >
+              {debugLoading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                <>
+                  <Bug className="h-4 w-4 mr-2" />
+                  Debug API
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
