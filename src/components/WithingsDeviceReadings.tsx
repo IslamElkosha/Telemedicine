@@ -35,6 +35,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
   const [subscriptionStatus, setSubscriptionStatus] = useState<'idle' | 'subscribed' | 'error'>('idle');
   const [debugLoading, setDebugLoading] = useState(false);
   const [debugData, setDebugData] = useState<any>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     loadReadings();
@@ -164,6 +165,41 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       alert(`Debug error: ${error.message}`);
     } finally {
       setDebugLoading(false);
+    }
+  };
+
+  const syncWithingsData = async () => {
+    try {
+      setSyncing(true);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Not authenticated');
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Data synced successfully! Refreshing...');
+        await loadReadings();
+      } else {
+        alert(`Sync failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      alert(`Sync error: ${error.message}`);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -363,23 +399,42 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
                 <p className="text-sm text-green-700">New measurements will appear automatically</p>
               </div>
             </div>
-            <button
-              onClick={debugWithingsAPI}
-              disabled={debugLoading}
-              className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center text-sm"
-            >
-              {debugLoading ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Testing...
-                </>
-              ) : (
-                <>
-                  <Bug className="h-4 w-4 mr-2" />
-                  Debug API
-                </>
-              )}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={syncWithingsData}
+                disabled={syncing}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center text-sm"
+              >
+                {syncing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Sync Now
+                  </>
+                )}
+              </button>
+              <button
+                onClick={debugWithingsAPI}
+                disabled={debugLoading}
+                className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center text-sm"
+              >
+                {debugLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Testing...
+                  </>
+                ) : (
+                  <>
+                    <Bug className="h-4 w-4 mr-2" />
+                    Debug API
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
