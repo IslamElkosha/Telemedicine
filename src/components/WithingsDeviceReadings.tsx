@@ -175,7 +175,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         });
       } else {
         setBpStatus('Connected');
-        setErrors(prev => ({ ...prev, bp: 'No readings available yet' }));
+        setErrors(prev => ({ ...prev, bp: 'Awaiting automatic data push from Withings. Please ensure the patient has recently taken a measurement on their BPM Connect.' }));
       }
     } catch (error: any) {
       console.error('Error fetching BP reading:', error);
@@ -233,7 +233,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
           connectionStatus: 'Connected',
         });
       } else {
-        setErrors(prev => ({ ...prev, thermo: 'No readings available yet' }));
+        setErrors(prev => ({ ...prev, thermo: 'Awaiting automatic data push from Withings. Please ensure the patient has recently taken a measurement on their Thermo device.' }));
       }
     } catch (error: any) {
       console.error('Error fetching temperature reading:', error);
@@ -383,25 +383,6 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
           <p className="text-sm text-gray-500">No blood pressure readings available</p>
         )}
 
-        {showRefresh && (
-          <button
-            onClick={fetchBPReading}
-            disabled={refreshing.bp}
-            className="mt-4 w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {refreshing.bp ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Fetching...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Fetch Latest BP Reading
-              </>
-            )}
-          </button>
-        )}
       </div>
 
       <div className={`bg-white rounded-xl border p-6 transition-all ${getStatusColor(thermoStatus)}`}>
@@ -451,25 +432,6 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
           <p className="text-sm text-gray-500">No temperature readings available</p>
         )}
 
-        {showRefresh && (
-          <button
-            onClick={fetchThermoReading}
-            disabled={refreshing.thermo}
-            className="mt-4 w-full bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {refreshing.thermo ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Fetching...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Fetch Latest Temperature
-              </>
-            )}
-          </button>
-        )}
       </div>
     </div>
   );
