@@ -214,8 +214,18 @@ Deno.serve(async (req: Request) => {
           }
 
           if (latestBP) {
-            console.log('Updating user_vitals_live with latest BP:', latestBP);
-            const { error: liveError } = await supabase
+            console.log('=== ATTEMPTING user_vitals_live BP UPDATE ===');
+            console.log('Data to upsert:', {
+              user_id: tokenData.user_id,
+              user_id_type: typeof tokenData.user_id,
+              device_type: 'BPM_CONNECT',
+              systolic_bp: latestBP.systolic,
+              diastolic_bp: latestBP.diastolic,
+              heart_rate: latestBP.heartRate,
+              timestamp: new Date(latestBP.timestamp * 1000).toISOString(),
+            });
+
+            const { data: upsertData, error: liveError } = await supabase
               .from('user_vitals_live')
               .upsert({
                 user_id: tokenData.user_id,
@@ -224,30 +234,52 @@ Deno.serve(async (req: Request) => {
                 diastolic_bp: latestBP.diastolic,
                 heart_rate: latestBP.heartRate,
                 timestamp: new Date(latestBP.timestamp * 1000).toISOString(),
-              }, { onConflict: 'user_id,device_type' });
+              }, { onConflict: 'user_id,device_type' })
+              .select();
 
             if (liveError) {
-              console.error('Error updating user_vitals_live BP:', liveError);
+              console.error('=== ERROR UPDATING user_vitals_live BP ===');
+              console.error('Error code:', liveError.code);
+              console.error('Error message:', liveError.message);
+              console.error('Error details:', liveError.details);
+              console.error('Error hint:', liveError.hint);
+              console.error('Full error object:', JSON.stringify(liveError, null, 2));
             } else {
-              console.log('user_vitals_live BP updated successfully');
+              console.log('=== user_vitals_live BP UPDATED SUCCESSFULLY ===');
+              console.log('Upserted data:', JSON.stringify(upsertData, null, 2));
             }
           }
 
           if (latestTemp) {
-            console.log('Updating user_vitals_live with latest temperature:', latestTemp);
-            const { error: liveError } = await supabase
+            console.log('=== ATTEMPTING user_vitals_live TEMP UPDATE ===');
+            console.log('Data to upsert:', {
+              user_id: tokenData.user_id,
+              user_id_type: typeof tokenData.user_id,
+              device_type: 'THERMO',
+              temperature_c: latestTemp.temperature,
+              timestamp: new Date(latestTemp.timestamp * 1000).toISOString(),
+            });
+
+            const { data: upsertData, error: liveError } = await supabase
               .from('user_vitals_live')
               .upsert({
                 user_id: tokenData.user_id,
                 device_type: 'THERMO',
                 temperature_c: latestTemp.temperature,
                 timestamp: new Date(latestTemp.timestamp * 1000).toISOString(),
-              }, { onConflict: 'user_id,device_type' });
+              }, { onConflict: 'user_id,device_type' })
+              .select();
 
             if (liveError) {
-              console.error('Error updating user_vitals_live temperature:', liveError);
+              console.error('=== ERROR UPDATING user_vitals_live TEMP ===');
+              console.error('Error code:', liveError.code);
+              console.error('Error message:', liveError.message);
+              console.error('Error details:', liveError.details);
+              console.error('Error hint:', liveError.hint);
+              console.error('Full error object:', JSON.stringify(liveError, null, 2));
             } else {
-              console.log('user_vitals_live temperature updated successfully');
+              console.log('=== user_vitals_live TEMP UPDATED SUCCESSFULLY ===');
+              console.log('Upserted data:', JSON.stringify(upsertData, null, 2));
             }
           }
 
