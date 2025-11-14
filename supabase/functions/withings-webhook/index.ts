@@ -126,6 +126,9 @@ Deno.serve(async (req: Request) => {
           const measureGroups = measureData.body?.measuregrps || [];
           console.log('Received', measureGroups.length, 'measurement groups');
 
+          let latestBP: any = null;
+          let latestTemp: any = null;
+
           for (const group of measureGroups) {
             const measurements: any = {
               user_id: tokenData.user_id,
@@ -135,23 +138,32 @@ Deno.serve(async (req: Request) => {
               withings_measure_id: `${group.grpid}`,
             };
 
+            const measurementTimestamp = group.date;
             let hasBP = false;
             let hasTemp = false;
+            let systolic: number | undefined;
+            let diastolic: number | undefined;
+            let heartRate: number | undefined;
+            let temperature: number | undefined;
 
             for (const measure of group.measures) {
               const rawValue = measure.value * Math.pow(10, measure.unit);
 
               if (measure.type === 9) {
-                measurements.diastolic = Math.round(rawValue);
+                diastolic = Math.round(rawValue);
+                measurements.diastolic = diastolic;
                 hasBP = true;
               } else if (measure.type === 10) {
-                measurements.systolic = Math.round(rawValue);
+                systolic = Math.round(rawValue);
+                measurements.systolic = systolic;
                 hasBP = true;
               } else if (measure.type === 11) {
-                measurements.heart_rate = Math.round(rawValue);
+                heartRate = Math.round(rawValue);
+                measurements.heart_rate = heartRate;
                 hasBP = true;
               } else if (measure.type === 12) {
-                measurements.temperature = parseFloat(rawValue.toFixed(2));
+                temperature = parseFloat(rawValue.toFixed(2));
+                measurements.temperature = temperature;
                 hasTemp = true;
               }
             }
@@ -168,6 +180,15 @@ Deno.serve(async (req: Request) => {
               } else {
                 console.log('BP measurement saved successfully');
               }
+
+              if (!latestBP || measurementTimestamp > latestBP.timestamp) {
+                latestBP = {
+                  timestamp: measurementTimestamp,
+                  systolic,
+                  diastolic,
+                  heartRate,
+                };
+              }
             }
 
             if (hasTemp) {
@@ -182,6 +203,51 @@ Deno.serve(async (req: Request) => {
               } else {
                 console.log('Temperature measurement saved successfully');
               }
+
+              if (!latestTemp || measurementTimestamp > latestTemp.timestamp) {
+                latestTemp = {
+                  timestamp: measurementTimestamp,
+                  temperature,
+                };
+              }
+            }
+          }
+
+          if (latestBP) {
+            console.log('Updating user_vitals_live with latest BP:', latestBP);
+            const { error: liveError } = await supabase
+              .from('user_vitals_live')
+              .upsert({
+                user_id: tokenData.user_id,
+                device_type: 'BPM_CONNECT',
+                systolic_bp: latestBP.systolic,
+                diastolic_bp: latestBP.diastolic,
+                heart_rate: latestBP.heartRate,
+                timestamp: new Date(latestBP.timestamp * 1000).toISOString(),
+              }, { onConflict: 'user_id,device_type' });
+
+            if (liveError) {
+              console.error('Error updating user_vitals_live BP:', liveError);
+            } else {
+              console.log('user_vitals_live BP updated successfully');
+            }
+          }
+
+          if (latestTemp) {
+            console.log('Updating user_vitals_live with latest temperature:', latestTemp);
+            const { error: liveError } = await supabase
+              .from('user_vitals_live')
+              .upsert({
+                user_id: tokenData.user_id,
+                device_type: 'THERMO',
+                temperature_c: latestTemp.temperature,
+                timestamp: new Date(latestTemp.timestamp * 1000).toISOString(),
+              }, { onConflict: 'user_id,device_type' });
+
+            if (liveError) {
+              console.error('Error updating user_vitals_live temperature:', liveError);
+            } else {
+              console.log('user_vitals_live temperature updated successfully');
             }
           }
 

@@ -48,11 +48,11 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
           {
             event: '*',
             schema: 'public',
-            table: 'withings_measurements',
+            table: 'user_vitals_live',
             filter: `user_id=eq.${session.user.id}`,
           },
           (payload) => {
-            console.log('Real-time measurement update received:', payload);
+            console.log('Real-time vitals update received:', payload);
             loadReadings();
           }
         )
@@ -149,13 +149,11 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         return;
       }
 
-      const { data: measurements, error } = await supabase
-        .from('withings_measurements')
+      const { data: vitals, error } = await supabase
+        .from('user_vitals_live')
         .select('*')
         .eq('user_id', userId || session.user.id)
-        .eq('measurement_type', 'blood_pressure')
-        .order('measured_at', { ascending: false })
-        .limit(1)
+        .eq('device_type', 'BPM_CONNECT')
         .maybeSingle();
 
       if (error) {
@@ -165,14 +163,14 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         return;
       }
 
-      if (measurements) {
+      if (vitals) {
         setBpStatus('Connected');
         setBpReading({
-          systolic: measurements.systolic,
-          diastolic: measurements.diastolic,
-          heartRate: measurements.heart_rate,
-          measuredAt: measurements.measured_at,
-          deviceModel: measurements.device_model || 'BPM Connect',
+          systolic: vitals.systolic_bp,
+          diastolic: vitals.diastolic_bp,
+          heartRate: vitals.heart_rate,
+          measuredAt: vitals.timestamp,
+          deviceModel: 'BPM Connect',
           connectionStatus: 'Connected',
         });
       } else {
@@ -211,13 +209,11 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         return;
       }
 
-      const { data: measurements, error } = await supabase
-        .from('withings_measurements')
+      const { data: vitals, error } = await supabase
+        .from('user_vitals_live')
         .select('*')
         .eq('user_id', userId || session.user.id)
-        .eq('measurement_type', 'temperature')
-        .order('measured_at', { ascending: false })
-        .limit(1)
+        .eq('device_type', 'THERMO')
         .maybeSingle();
 
       if (error) {
@@ -229,11 +225,11 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
       setThermoStatus('Connected');
 
-      if (measurements) {
+      if (vitals) {
         setThermoReading({
-          temperature: measurements.temperature,
-          measuredAt: measurements.measured_at,
-          deviceModel: measurements.device_model || 'Thermo',
+          temperature: vitals.temperature_c,
+          measuredAt: vitals.timestamp,
+          deviceModel: 'Thermo',
           connectionStatus: 'Connected',
         });
       } else {
