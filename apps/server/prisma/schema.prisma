@@ -1,0 +1,423 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  PLATFORM_OPS
+  HOSPITAL_ADMIN
+  DOCTOR
+  TECHNICIAN
+  FREELANCE_TECHNICIAN
+  PATIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum AppointmentStatus {
+  BOOKED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum LocationType {
+  HOSPITAL
+  HOME
+  REMOTE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum DeviceType {
+  ECG
+  SPO2
+  BP
+  THERMO
+  GLUCO
+  STETH
+  ULTRASOUND
+  OTHER
+}
+
+enum KitStatus {
+  ASSIGNED
+  IN_STOCK
+  MAINTENANCE
+}
+
+enum TechnicianAvailability {
+  ONLINE
+  OFFLINE
+  BUSY
+}
+
+enum SessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum NotificationChannel {
+  IN_APP
+  SMS
+  EMAIL
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  SCHEDULED
+  SENT
+  FAILED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  phone        String?
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  role         UserRole
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  profile         UserProfile?
+  addresses       Address[]
+  patientProfile  Patient?
+  doctorProfile   Doctor?
+  technicianProfile Technician?
+  hospitalUsers   HospitalUser[]
+  createdAppointments Appointment[] @relation("CreatedByUser")
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  doctorAppointments  Appointment[] @relation("DoctorAppointments")
+  technicianAppointments Appointment[] @relation("TechnicianAppointments")
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  fileAssets      FileAsset[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId     String   @id
+  fullName   String
+  gender     String?
+  dob        DateTime?
+  avatarUrl  String?
+  nationalId String?
+  locale     String   @default("ar-EG")
+  timezone   String   @default("Africa/Cairo")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Hospital {
+  id            String  @id @default(cuid())
+  name          String
+  contactEmail  String?
+  phone         String?
+  address       String
+  city          String
+  region        String
+  locationPoint Json?   // {lat: number, lng: number}
+  createdAt     DateTime @default(now())
+
+  // Relations
+  hospitalUsers HospitalUser[]
+  appointments  Appointment[]
+  kits          Kit[]
+  doctors       Doctor[]
+
+  @@map("hospitals")
+}
+
+model HospitalUser {
+  id         String @id @default(cuid())
+  hospitalId String
+  userId     String
+  role       String // HOSPITAL_ADMIN, DOCTOR, TECHNICIAN
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([hospitalId, userId])
+  @@map("hospital_users")
+}
+
+model Technician {
+  id             String                  @id
+  isFreelance    Boolean                 @default(false)
+  coverageAreas  Json                    @default("[]") // string[]
+  kitId          String?
+  rating         Float?
+  availability   TechnicianAvailability  @default(OFFLINE)
+  currentGeo     Json?                   // {lat: number, lng: number}
+  lastSeenAt     DateTime?
+
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+  kit  Kit? @relation(fields: [kitId], references: [id])
+  routes TechnicianRoute[]
+  ownedDevices Device[] @relation("DeviceOwner")
+
+  @@map("technicians")
+}
+
+model Kit {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  technicianId String?
+  hospitalId   String?
+  status       KitStatus @default(IN_STOCK)
+
+  technician Technician? @relation(fields: [technicianId], references: [id])
+  hospital   Hospital?   @relation(fields: [hospitalId], references: [id])
+  devices    Device[]
+
+  @@map("kits")
+}
+
+model Device {
+  id                  String     @id @default(cuid())
+  type                DeviceType
+  make                String
+  model               String
+  serial              String     @unique
+  pairingCode         String     @unique
+  ownerTechnicianId   String?
+  assignedKitId       String?
+  fhirMapping         Json?
+  status              String     @default("ACTIVE") // ACTIVE, RETIRED
+  createdAt           DateTime   @default(now())
+
+  ownerTechnician Technician? @relation("DeviceOwner", fields: [ownerTechnicianId], references: [id])
+  assignedKit     Kit?        @relation(fields: [assignedKitId], references: [id])
+  readings        Reading[]
+
+  @@map("devices")
+}
+
+model Patient {
+  id        String  @id
+  mrn       String?
+  bloodType String?
+  allergies Json?   // string[]
+  heightCm  Int?
+  weightKg  Float?
+
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@map("patients")
+}
+
+model Doctor {
+  id         String  @id
+  specialty  String
+  licenseNo  String?
+  hospitalId String?
+
+  user     User      @relation(fields: [id], references: [id], onDelete: Cascade)
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+
+  @@map("doctors")
+}
+
+model Address {
+  id         String  @id @default(cuid())
+  userId     String?
+  label      String
+  line1      String
+  line2      String?
+  city       String
+  region     String
+  country    String  @default("EG")
+  postalCode String?
+  geo        Json?   // {lat: number, lng: number}
+  isPrimary  Boolean @default(false)
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@map("addresses")
+}
+
+model Appointment {
+  id               String            @id @default(cuid())
+  patientId        String
+  doctorId         String
+  technicianId     String?
+  hospitalId       String?
+  status           AppointmentStatus @default(BOOKED)
+  startAt          DateTime
+  endAt            DateTime
+  locationType     LocationType
+  addressId        String?
+  notes            String?
+  createdByUserId  String
+  assignedAreaCode String?
+  source           String            @default("APP") // APP, ADMIN, API
+  paymentStatus    PaymentStatus     @default(PENDING)
+  updatedAt        DateTime          @updatedAt
+  createdAt        DateTime          @default(now())
+
+  patient     User      @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctor      User      @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  technician  User?     @relation("TechnicianAppointments", fields: [technicianId], references: [id])
+  hospital    Hospital? @relation(fields: [hospitalId], references: [id])
+  address     Address?  @relation(fields: [addressId], references: [id])
+  createdBy   User      @relation("CreatedByUser", fields: [createdByUserId], references: [id])
+  sessions    Session[]
+  payments    Payment[]
+
+  @@index([status, startAt])
+  @@map("appointments")
+}
+
+model Session {
+  id            String        @id @default(cuid())
+  appointmentId String
+  startedAt     DateTime      @default(now())
+  endedAt       DateTime?
+  status        SessionStatus @default(OPEN)
+  summary       String?
+  createdAt     DateTime      @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  readings    Reading[]
+
+  @@map("sessions")
+}
+
+model Reading {
+  id          String   @id @default(cuid())
+  sessionId   String
+  deviceId    String
+  type        String
+  payload     Json
+  capturedAt  DateTime @default(now())
+  fhirBundle  Json?
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  device  Device  @relation(fields: [deviceId], references: [id])
+
+  @@index([sessionId, capturedAt])
+  @@map("readings")
+}
+
+model FileAsset {
+  id            String   @id @default(cuid())
+  ownerUserId   String?
+  appointmentId String?
+  url           String
+  mimeType      String
+  size          Int
+  createdAt     DateTime @default(now())
+
+  owner User? @relation(fields: [ownerUserId], references: [id])
+
+  @@map("file_assets")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  appointmentId     String
+  amountEgp         Int           // Amount in piasters (1 EGP = 100 piasters)
+  currency          String        @default("EGP")
+  provider          String        // STRIPE, ACCEPT, MANUAL
+  providerIntentId  String?
+  status            PaymentStatus @default(PENDING)
+  createdAt         DateTime      @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  invoices    Invoice[]
+
+  @@map("payments")
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  paymentId String
+  pdfUrl    String?
+  issuedAt  DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@map("invoices")
+}
+
+model Notification {
+  id           String             @id @default(cuid())
+  userId       String
+  title        String
+  body         String
+  data         Json?
+  channel      NotificationChannel
+  status       NotificationStatus @default(SCHEDULED)
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor])
+  @@map("notifications")
+}
+
+model Geofence {
+  id      String @id @default(cuid())
+  name    String
+  polygon Json   // GeoJSON polygon
+  city    String
+  region  String
+
+  @@map("geofences")
+}
+
+model TechnicianRoute {
+  id           String   @id @default(cuid())
+  technicianId String
+  day          DateTime @db.Date
+  points       Json     // Array of {lat, lng, timestamp}
+  distanceKm   Float?
+  durationMin  Int?
+
+  technician Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@map("technician_routes")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  entityType String
+  entityId   String
+  action     String
+  diff       Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
