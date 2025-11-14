@@ -28,7 +28,7 @@ interface VitalsPanelProps {
 const VitalsPanel: React.FC<VitalsPanelProps> = ({
   patientId,
   autoRefresh = true,
-  refreshInterval = 15000,
+  refreshInterval = 90000,
   compact = false,
 }) => {
   const [bpReading, setBpReading] = useState<BPReading | null>(null);

@@ -8,7 +8,9 @@ const corsHeaders = {
 
 const WITHINGS_API_BASE = 'https://wbsapi.withings.net';
 const WITHINGS_MEASURE_PATH = '/v2/measure';
+const WITHINGS_TOKEN_PATH = '/oauth2/token';
 const WITHINGS_MEASURE_URL = WITHINGS_API_BASE + WITHINGS_MEASURE_PATH;
+const WITHINGS_TOKEN_URL = WITHINGS_API_BASE + WITHINGS_TOKEN_PATH;
 
 interface BPReading {
   systolic: number;
@@ -18,6 +20,65 @@ interface BPReading {
   deviceModel: string;
   connectionStatus: 'Connected' | 'Disconnected';
   error?: string;
+}
+
+async function refreshAccessToken(supabase: any, userId: string, refreshToken: string): Promise<string | null> {
+  try {
+    console.log('=== REFRESHING ACCESS TOKEN ===');
+    
+    const WITHINGS_CLIENT_ID = Deno.env.get('WITHINGS_CLIENT_ID') || '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
+    const WITHINGS_CLIENT_SECRET = Deno.env.get('WITHINGS_CLIENT_SECRET') || '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
+
+    const refreshParams = new URLSearchParams({
+      action: 'requesttoken',
+      grant_type: 'refresh_token',
+      client_id: WITHINGS_CLIENT_ID,
+      client_secret: WITHINGS_CLIENT_SECRET,
+      refresh_token: refreshToken,
+    });
+
+    console.log('Sending token refresh request to:', WITHINGS_TOKEN_URL);
+    const refreshResponse = await fetch(WITHINGS_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: refreshParams.toString(),
+    });
+
+    const refreshData = await refreshResponse.json();
+    console.log('Token refresh response status:', refreshData.status);
+
+    if (refreshData.status !== 0 || !refreshData.body) {
+      console.error('Token refresh failed:', refreshData);
+      return null;
+    }
+
+    console.log('Token refreshed successfully!');
+    console.log('  - New Access Token (first 30 chars):', refreshData.body.access_token?.substring(0, 30) + '...');
+    console.log('  - New Refresh Token (first 30 chars):', refreshData.body.refresh_token?.substring(0, 30) + '...');
+
+    const expiresIn = refreshData.body.expires_in || 10800;
+    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
+
+    const { error: updateError } = await supabase
+      .from('withings_tokens')
+      .update({
+        access_token: refreshData.body.access_token,
+        refresh_token: refreshData.body.refresh_token,
+        token_expiry_timestamp: expiryTimestamp,
+      })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Failed to update token in database:', updateError);
+      return null;
+    }
+
+    console.log('Token updated in database successfully');
+    return refreshData.body.access_token;
+  } catch (error: any) {
+    console.error('Error refreshing token:', error);
+    return null;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -83,17 +144,34 @@ Deno.serve(async (req: Request) => {
     console.log('  - Access Token (first 30 chars):', tokenData.access_token.substring(0, 30) + '...');
     console.log('  - Token Expiry:', new Date(tokenData.token_expiry_timestamp * 1000).toISOString());
 
+    let accessToken = tokenData.access_token;
     const now = Math.floor(Date.now() / 1000);
-    if (tokenData.token_expiry_timestamp <= now) {
-      console.error('Token expired. Expiry:', tokenData.token_expiry_timestamp, 'Now:', now);
-      return new Response(
-        JSON.stringify({
-          connectionStatus: 'Disconnected',
-          error: 'Token expired. Please reconnect your device.',
-          needsRefresh: true
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const bufferTime = 300;
+    
+    if (tokenData.token_expiry_timestamp <= (now + bufferTime)) {
+      console.log('Token expired or expiring soon. Attempting to refresh...');
+      console.log('  - Current time:', now);
+      console.log('  - Token expiry:', tokenData.token_expiry_timestamp);
+      console.log('  - Time until expiry:', tokenData.token_expiry_timestamp - now, 'seconds');
+      
+      const newAccessToken = await refreshAccessToken(supabase, user.id, tokenData.refresh_token);
+      
+      if (!newAccessToken) {
+        console.error('Failed to refresh token');
+        return new Response(
+          JSON.stringify({
+            connectionStatus: 'Disconnected',
+            error: 'Token expired and refresh failed. Please reconnect your device.',
+            needsRefresh: true
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      accessToken = newAccessToken;
+      console.log('Using newly refreshed token');
+    } else {
+      console.log('Token is still valid for', tokenData.token_expiry_timestamp - now, 'seconds');
     }
 
     const lastUpdate = Math.floor(Date.now() / 1000 - 30 * 24 * 60 * 60);
@@ -112,7 +190,7 @@ Deno.serve(async (req: Request) => {
 
     const measureResponse = await fetch(measureUrl, {
       headers: {
-        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
     });
 
@@ -139,11 +217,17 @@ Deno.serve(async (req: Request) => {
     if (measureData.status !== 0) {
       console.error('Withings API error. Status:', measureData.status);
       console.error('Error details:', measureData);
+      
+      if (measureData.status === 503) {
+        console.error('Rate limiting detected! Consider increasing polling interval.');
+      }
+      
       return new Response(
         JSON.stringify({
           connectionStatus: 'Disconnected',
           error: `API error: ${measureData.status}`,
-          details: measureData
+          details: measureData,
+          rateLimited: measureData.status === 503
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
