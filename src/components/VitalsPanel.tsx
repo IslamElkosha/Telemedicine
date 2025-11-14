@@ -325,7 +325,11 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
               </p>
             </>
           ) : (
-            <p className="text-sm text-gray-500 text-center py-4">No blood pressure data available</p>
+            <div className="text-center py-6">
+              <Heart className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-600">Awaiting First Reading</p>
+              <p className="text-xs text-gray-400 mt-1">Data will appear when device syncs</p>
+            </div>
           )}
         </div>
 
@@ -356,7 +360,11 @@ const VitalsPanel: React.FC<VitalsPanelProps> = ({
               </p>
             </>
           ) : (
-            <p className="text-sm text-gray-500 text-center py-4">No temperature data available</p>
+            <div className="text-center py-6">
+              <Thermometer className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-600">Awaiting First Reading</p>
+              <p className="text-xs text-gray-400 mt-1">Data will appear when device syncs</p>
+            </div>
           )}
         </div>
       </div>
