@@ -264,17 +264,37 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
       console.log('[WithingsDeviceReadings] Request URL:', apiUrl);
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
+      let response;
+      try {
+        response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+        });
 
-      console.log('[WithingsDeviceReadings] Response status:', response.status);
+        console.log('[WithingsDeviceReadings] Response status:', response.status);
+        console.log('[WithingsDeviceReadings] Response headers:', {
+          'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
+          'content-type': response.headers.get('content-type'),
+        });
+      } catch (fetchError: any) {
+        console.error('=== [WithingsDeviceReadings] FETCH ERROR ===');
+        console.error('Error name:', fetchError.name);
+        console.error('Error message:', fetchError.message);
+        console.error('Error type:', fetchError instanceof TypeError ? 'TypeError (Network/CORS)' : 'Other');
+        console.error('Full error:', fetchError);
+
+        setBpStatus('Disconnected');
+        setErrors(prev => ({
+          ...prev,
+          bp: `Network error: ${fetchError.message}. This could be a CORS issue, network timeout, or connection problem. Check browser console for details.`
+        }));
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
