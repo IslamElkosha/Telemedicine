@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Thermometer, Activity, RefreshCw, CheckCircle, XCircle, AlertCircle, Bug } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -36,8 +36,11 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
   const [debugLoading, setDebugLoading] = useState(false);
   const [debugData, setDebugData] = useState<any>(null);
   const [syncing, setSyncing] = useState(false);
+  const lastFetchTimeRef = useRef<number>(0);
 
   useEffect(() => {
+    console.log('[WithingsDeviceReadings] Component mounted - fetching initial data');
+    lastFetchTimeRef.current = Date.now();
     loadReadings();
     checkSubscriptionStatus();
 
@@ -56,6 +59,16 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
           },
           (payload) => {
             console.log('Real-time vitals update received:', payload);
+            const now = Date.now();
+            const timeSinceLastFetch = now - lastFetchTimeRef.current;
+
+            if (timeSinceLastFetch < 5000) {
+              console.log(`[WithingsDeviceReadings] Rate limit: Skipping fetch (${timeSinceLastFetch}ms since last fetch, min 5000ms)`);
+              return;
+            }
+
+            console.log('[WithingsDeviceReadings] Real-time update triggered fetch');
+            lastFetchTimeRef.current = now;
             loadReadings();
           }
         )
@@ -231,7 +244,17 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
   const fetchBPReading = async () => {
     try {
+      const now = Date.now();
+      const timeSinceLastFetch = now - lastFetchTimeRef.current;
+
+      if (timeSinceLastFetch < 3000) {
+        console.log(`[WithingsDeviceReadings] Rate limit: Fetch rejected (${timeSinceLastFetch}ms since last fetch, min 3000ms)`);
+        setErrors(prev => ({ ...prev, bp: `Please wait ${Math.ceil((3000 - timeSinceLastFetch) / 1000)} seconds before refreshing again.` }));
+        return;
+      }
+
       console.log('=== [WithingsDeviceReadings] FETCHING BP READING ===');
+      lastFetchTimeRef.current = now;
       setRefreshing(prev => ({ ...prev, bp: true }));
       setErrors(prev => ({ ...prev, bp: undefined }));
       setBpReading(null);
@@ -366,6 +389,14 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
   const fetchThermoReading = async () => {
     try {
+      const now = Date.now();
+      const timeSinceLastFetch = now - lastFetchTimeRef.current;
+
+      if (timeSinceLastFetch < 3000) {
+        console.log(`[WithingsDeviceReadings] Rate limit: Thermo fetch rejected (${timeSinceLastFetch}ms since last fetch, min 3000ms)`);
+        return;
+      }
+
       setRefreshing(prev => ({ ...prev, thermo: true }));
       setErrors(prev => ({ ...prev, thermo: undefined }));
 
