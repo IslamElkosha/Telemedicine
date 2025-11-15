@@ -6,8 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/measure';
-const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/oauth2/token';
+const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/v2/measure';
+const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2';
 
 interface MeasureType {
   type: number;
@@ -21,17 +21,13 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
 
     const WITHINGS_CLIENT_ID = Deno.env.get('WITHINGS_CLIENT_ID') || '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
     const WITHINGS_CLIENT_SECRET = Deno.env.get('WITHINGS_CLIENT_SECRET') || '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
 
-    const refreshParams = new URLSearchParams({
-      action: 'requesttoken',
-      grant_type: 'refresh_token',
-      client_id: WITHINGS_CLIENT_ID,
-      client_secret: WITHINGS_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      refresh_token: refreshToken,
-    });
+    const refreshParams = new URLSearchParams();
+    refreshParams.append('action', 'requesttoken');
+    refreshParams.append('grant_type', 'refresh_token');
+    refreshParams.append('client_id', WITHINGS_CLIENT_ID);
+    refreshParams.append('client_secret', WITHINGS_CLIENT_SECRET);
+    refreshParams.append('refresh_token', refreshToken);
 
     console.log('Sending token refresh request to:', WITHINGS_TOKEN_URL);
     console.log('Refresh parameters:', {
@@ -39,7 +35,6 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
       grant_type: 'refresh_token',
       client_id: WITHINGS_CLIENT_ID,
       client_secret: WITHINGS_CLIENT_SECRET.substring(0, 10) + '...',
-      redirect_uri: redirectUri,
       refresh_token: refreshToken.substring(0, 20) + '...',
     });
     const refreshResponse = await fetch(WITHINGS_TOKEN_URL, {
@@ -195,6 +190,15 @@ Deno.serve(async (req: Request) => {
 
     const measurements: any[] = [];
     const measureGroups = measureData.body?.measuregrps || [];
+
+    console.log('Received', measureGroups.length, 'measurement groups from Withings API');
+    console.log('SORTING measurement groups by date (descending)...');
+    measureGroups.sort((a: any, b: any) => b.date - a.date);
+
+    console.log('Measurement groups sorted. First 3 timestamps:');
+    for (let i = 0; i < Math.min(3, measureGroups.length); i++) {
+      console.log(`  ${i + 1}. Date: ${measureGroups[i].date} (${new Date(measureGroups[i].date * 1000).toISOString()})`);
+    }
 
     for (const group of measureGroups) {
       const measuredAt = new Date(group.date * 1000);
