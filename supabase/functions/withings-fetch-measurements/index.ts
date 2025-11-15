@@ -164,12 +164,18 @@ Deno.serve(async (req: Request) => {
       console.log('Token is still valid');
     }
 
-    const url = new URL(req.url);
-    const lastUpdate = url.searchParams.get('lastupdate') || Math.floor(Date.now() / 1000 - 30 * 24 * 60 * 60).toString();
+    const nowTimestamp = Math.floor(Date.now() / 1000);
+    const sevenDaysAgo = nowTimestamp - (7 * 24 * 60 * 60);
+
+    console.log('=== DYNAMIC TIMESTAMP CALCULATION ===');
+    console.log('  - Current time (now):', nowTimestamp, '→', new Date(nowTimestamp * 1000).toISOString());
+    console.log('  - 7 days ago (startdate):', sevenDaysAgo, '→', new Date(sevenDaysAgo * 1000).toISOString());
+    console.log('  - This calculation runs FRESH on every request');
 
     const measureParams = new URLSearchParams({
       action: 'getmeas',
-      lastupdate: lastUpdate,
+      startdate: sevenDaysAgo.toString(),
+      enddate: nowTimestamp.toString(),
     });
 
     const measureResponse = await fetch(`${WITHINGS_MEASURE_URL}?${measureParams.toString()}`, {

@@ -190,10 +190,18 @@ Deno.serve(async (req: Request) => {
       console.log('Token is still valid for', tokenData.token_expiry_timestamp - now, 'seconds');
     }
 
-    const lastUpdate = Math.floor(Date.now() / 1000 - 30 * 24 * 60 * 60);
+    const nowTimestamp = Math.floor(Date.now() / 1000);
+    const sevenDaysAgo = nowTimestamp - (7 * 24 * 60 * 60);
+
+    console.log('=== DYNAMIC TIMESTAMP CALCULATION ===');
+    console.log('  - Current time (now):', nowTimestamp, '→', new Date(nowTimestamp * 1000).toISOString());
+    console.log('  - 7 days ago (startdate):', sevenDaysAgo, '→', new Date(sevenDaysAgo * 1000).toISOString());
+    console.log('  - This calculation runs FRESH on every request');
+
     const measureParams = new URLSearchParams({
       action: 'getmeas',
-      lastupdate: lastUpdate.toString(),
+      startdate: sevenDaysAgo.toString(),
+      enddate: nowTimestamp.toString(),
       meastype: '9,10,11',
     });
 
@@ -201,7 +209,8 @@ Deno.serve(async (req: Request) => {
     console.log('Fetching measurements from:', measureUrl);
     console.log('Request parameters:');
     console.log('  - action: getmeas');
-    console.log('  - lastupdate:', lastUpdate, '(', new Date(lastUpdate * 1000).toISOString(), ')');
+    console.log('  - startdate:', sevenDaysAgo, '(', new Date(sevenDaysAgo * 1000).toISOString(), ')');
+    console.log('  - enddate:', nowTimestamp, '(', new Date(nowTimestamp * 1000).toISOString(), ')');
     console.log('  - meastype: 9 (diastolic), 10 (systolic), 11 (heart rate)');
 
     const measureResponse = await fetch(measureUrl, {
