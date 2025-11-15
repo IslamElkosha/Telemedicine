@@ -104,7 +104,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         supabase.removeChannel(tokensChannel);
       };
     });
-  }, [userId]);
+  }, []);
 
   const checkSubscriptionStatus = async () => {
     try {
