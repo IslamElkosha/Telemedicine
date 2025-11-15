@@ -57,6 +57,8 @@ const DeviceReadings: React.FC = () => {
 
   const fetchLatestBPReading = async () => {
     try {
+      console.log('=== [DeviceReadings] FORCE CLEARING ALL STATE ===');
+      setReadings([]);
       setLoading(true);
       setError(null);
 
@@ -71,13 +73,18 @@ const DeviceReadings: React.FC = () => {
       console.log('[DeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading`;
+      const cacheBuster = Date.now();
+      const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading?_t=${cacheBuster}`;
+
+      console.log('[DeviceReadings] Cache-busting URL:', apiUrl);
 
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
         },
       });
 
@@ -98,18 +105,27 @@ const DeviceReadings: React.FC = () => {
       }
 
       const bpData: BPData = await response.json();
-      console.log('[DeviceReadings] BP Data received:', bpData);
+      console.log('=== [DeviceReadings] RAW RESPONSE FROM BACKEND ===');
+      console.log('Full response object:', JSON.stringify(bpData, null, 2));
+      console.log('Systolic (raw):', bpData.systolic, 'Type:', typeof bpData.systolic);
+      console.log('Diastolic (raw):', bpData.diastolic, 'Type:', typeof bpData.diastolic);
+      console.log('Heart Rate (raw):', bpData.heart_rate, 'Type:', typeof bpData.heart_rate);
+      console.log('Timestamp:', bpData.timestamp, '→', new Date(bpData.timestamp * 1000).toISOString());
+      console.log('Success flag:', bpData.success);
 
       if (!bpData.success || !bpData.systolic || !bpData.diastolic) {
-        console.log('[DeviceReadings] No BP data available');
+        console.log('[DeviceReadings] No BP data available (success:', bpData.success, ', systolic:', bpData.systolic, ', diastolic:', bpData.diastolic, ')');
         setReadings(getEmptyReadings());
         setLoading(false);
         return;
       }
 
+      console.log('=== [DeviceReadings] BUILDING DISPLAY DATA ===');
       const readingsData: DeviceReading[] = [];
 
       const bpValue = `${bpData.systolic}/${bpData.diastolic}`;
+      console.log('BP Display String:', bpValue);
+
       let bpStatus: 'normal' | 'warning' | 'critical' = 'normal';
 
       if (bpData.systolic >= 180 || bpData.diastolic >= 120) {
@@ -120,7 +136,7 @@ const DeviceReadings: React.FC = () => {
         bpStatus = 'warning';
       }
 
-      readingsData.push({
+      const bpReading = {
         deviceType: 'Blood Pressure Monitor',
         reading: bpValue,
         unit: 'mmHg',
@@ -128,7 +144,10 @@ const DeviceReadings: React.FC = () => {
         status: bpStatus,
         icon: Heart,
         connected: true
-      });
+      };
+
+      console.log('BP Reading Object:', JSON.stringify(bpReading, null, 2));
+      readingsData.push(bpReading);
 
       if (bpData.heart_rate) {
         let hrStatus: 'normal' | 'warning' | 'critical' = 'normal';
@@ -140,7 +159,7 @@ const DeviceReadings: React.FC = () => {
           hrStatus = 'critical';
         }
 
-        readingsData.push({
+        const hrReading = {
           deviceType: 'Heart Rate Monitor',
           reading: bpData.heart_rate.toString(),
           unit: 'BPM',
@@ -148,12 +167,21 @@ const DeviceReadings: React.FC = () => {
           status: hrStatus,
           icon: Activity,
           connected: true
-        });
+        };
+
+        console.log('HR Reading Object:', JSON.stringify(hrReading, null, 2));
+        readingsData.push(hrReading);
       }
 
-      console.log('[DeviceReadings] Displaying readings:', readingsData);
+      console.log('=== [DeviceReadings] FINAL READINGS ARRAY ===');
+      console.log('Array length:', readingsData.length);
+      console.log('Full array:', JSON.stringify(readingsData, null, 2));
+      console.log('=== [DeviceReadings] SETTING STATE (setReadings) ===');
+
       setReadings(readingsData);
       setLoading(false);
+
+      console.log('=== [DeviceReadings] STATE UPDATE COMPLETE ===');
 
     } catch (error: any) {
       console.error('[DeviceReadings] Error fetching BP reading:', error);
@@ -186,7 +214,13 @@ const DeviceReadings: React.FC = () => {
     ];
   };
 
+  console.log('=== [DeviceReadings] RENDER CYCLE ===');
+  console.log('Loading state:', loading);
+  console.log('Error state:', error);
+  console.log('Readings state:', JSON.stringify(readings, null, 2));
+
   if (loading) {
+    console.log('[DeviceReadings] Rendering LOADING state');
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
@@ -201,6 +235,8 @@ const DeviceReadings: React.FC = () => {
       </div>
     );
   }
+
+  console.log('[DeviceReadings] Rendering MAIN UI with', readings.length, 'readings');
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -238,30 +274,32 @@ const DeviceReadings: React.FC = () => {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {readings.map((reading, index) => (
-            <div key={index} className="bg-gray-50 p-4 rounded-lg relative hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2">
-                  <reading.icon className="h-4 w-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-900 truncate">
-                    {reading.deviceType}
-                  </span>
-                </div>
-                {reading.connected ? (
-                  <div className="flex items-center space-x-1">
-                    <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+          {readings.map((reading, index) => {
+            console.log(`[DeviceReadings] Rendering card ${index}:`, reading.deviceType, '→', reading.reading);
+            return (
+              <div key={index} className="bg-gray-50 p-4 rounded-lg relative hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <reading.icon className="h-4 w-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-900 truncate">
+                      {reading.deviceType}
+                    </span>
                   </div>
-                ) : (
-                  <WifiOff className="h-4 w-4 text-gray-400" />
-                )}
-              </div>
+                  {reading.connected ? (
+                    <div className="flex items-center space-x-1">
+                      <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                    </div>
+                  ) : (
+                    <WifiOff className="h-4 w-4 text-gray-400" />
+                  )}
+                </div>
 
-              <div className="mb-3">
-                <span className="text-2xl font-bold text-gray-900">
-                  {reading.reading}
-                </span>
-                <span className="text-sm text-gray-600 ml-1">{reading.unit}</span>
-              </div>
+                <div className="mb-3">
+                  <span className="text-2xl font-bold text-gray-900">
+                    {reading.reading}
+                  </span>
+                  <span className="text-sm text-gray-600 ml-1">{reading.unit}</span>
+                </div>
 
               <div className="flex items-center justify-between">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -277,7 +315,8 @@ const DeviceReadings: React.FC = () => {
                 </span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {readings.some(r => !r.connected) && (
