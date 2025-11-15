@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const WITHINGS_API_BASE = 'https://wbsapi.withings.net';
 const WITHINGS_MEASURE_PATH = '/v2/measure';
-const WITHINGS_TOKEN_PATH = '/oauth2/token';
+const WITHINGS_TOKEN_PATH = '/v2/oauth2';
 const WITHINGS_MEASURE_URL = WITHINGS_API_BASE + WITHINGS_MEASURE_PATH;
 const WITHINGS_TOKEN_URL = WITHINGS_API_BASE + WITHINGS_TOKEN_PATH;
 
@@ -28,17 +28,13 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
 
     const WITHINGS_CLIENT_ID = Deno.env.get('WITHINGS_CLIENT_ID') || '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
     const WITHINGS_CLIENT_SECRET = Deno.env.get('WITHINGS_CLIENT_SECRET') || '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
 
-    const refreshParams = new URLSearchParams({
-      action: 'requesttoken',
-      grant_type: 'refresh_token',
-      client_id: WITHINGS_CLIENT_ID,
-      client_secret: WITHINGS_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      refresh_token: refreshToken,
-    });
+    const refreshParams = new URLSearchParams();
+    refreshParams.append('action', 'requesttoken');
+    refreshParams.append('grant_type', 'refresh_token');
+    refreshParams.append('client_id', WITHINGS_CLIENT_ID);
+    refreshParams.append('client_secret', WITHINGS_CLIENT_SECRET);
+    refreshParams.append('refresh_token', refreshToken);
 
     console.log('Sending token refresh request to:', WITHINGS_TOKEN_URL);
     console.log('Refresh parameters:', {
@@ -46,7 +42,6 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
       grant_type: 'refresh_token',
       client_id: WITHINGS_CLIENT_ID,
       client_secret: WITHINGS_CLIENT_SECRET.substring(0, 10) + '...',
-      redirect_uri: redirectUri,
       refresh_token: refreshToken.substring(0, 20) + '...',
     });
 
@@ -293,7 +288,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const bpGroups = measureGroups.filter((group: any) => {
-      const hasRelevantMeasures = group.measures.some((m: any) => 
+      const hasRelevantMeasures = group.measures.some((m: any) =>
         m.type === 9 || m.type === 10 || m.type === 11
       );
       return hasRelevantMeasures;
@@ -311,6 +306,14 @@ Deno.serve(async (req: Request) => {
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    console.log('SORTING measurement groups by date (descending)...');
+    bpGroups.sort((a: any, b: any) => b.date - a.date);
+
+    console.log('Measurement groups sorted. First 3 timestamps:');
+    for (let i = 0; i < Math.min(3, bpGroups.length); i++) {
+      console.log(`  ${i + 1}. Date: ${bpGroups[i].date} (${new Date(bpGroups[i].date * 1000).toISOString()})`);
     }
 
     const latestGroup = bpGroups[0];
@@ -387,13 +390,20 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('=== FETCH LATEST BP READING END - SUCCESS ===');
-    
+
+    const cleanResponse = {
+      systolic: reading.systolic || 0,
+      diastolic: reading.diastolic || 0,
+      heart_rate: reading.heartRate || 0,
+      timestamp: latestGroup.date,
+      connectionStatus: 'Connected',
+      success: true
+    };
+
+    console.log('Sending clean response to UI:', cleanResponse);
+
     return new Response(
-      JSON.stringify({
-        connectionStatus: 'Connected',
-        data: reading,
-        success: true
-      }),
+      JSON.stringify(cleanResponse),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
