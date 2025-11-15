@@ -231,11 +231,14 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
   const fetchBPReading = async () => {
     try {
+      console.log('=== [WithingsDeviceReadings] FETCHING BP READING ===');
       setRefreshing(prev => ({ ...prev, bp: true }));
       setErrors(prev => ({ ...prev, bp: undefined }));
+      setBpReading(null);
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.log('[WithingsDeviceReadings] No session found');
         setBpStatus('Disconnected');
         return;
       }
@@ -247,45 +250,72 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
         .maybeSingle();
 
       if (!tokenData) {
+        console.log('[WithingsDeviceReadings] No Withings token found');
         setBpStatus('Disconnected');
         setErrors(prev => ({ ...prev, bp: 'Withings connection expired. Please reconnect your devices on the Devices page.' }));
         return;
       }
 
-      const { data: vitals, error } = await supabase
-        .from('user_vitals_live')
-        .select('systolic_bp, diastolic_bp, heart_rate, timestamp, device_type')
-        .eq('user_id', userId || session.user.id)
-        .not('systolic_bp', 'is', null)
-        .not('diastolic_bp', 'is', null)
-        .order('timestamp', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      console.log('[WithingsDeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
 
-      if (error) {
-        console.error('Error fetching BP from database:', error);
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const cacheBuster = Date.now();
+      const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading?_t=${cacheBuster}`;
+
+      console.log('[WithingsDeviceReadings] Request URL:', apiUrl);
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
+
+      console.log('[WithingsDeviceReadings] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[WithingsDeviceReadings] Error response:', errorData);
         setBpStatus('Disconnected');
-        setErrors(prev => ({ ...prev, bp: 'Failed to load data' }));
+        setErrors(prev => ({ ...prev, bp: errorData.error || 'Failed to fetch BP data' }));
         return;
       }
 
-      if (vitals && vitals.systolic_bp && vitals.diastolic_bp) {
-        console.log('BP data fetched from WithingsDeviceReadings:', vitals);
-        setBpStatus('Connected');
-        setBpReading({
-          systolic: vitals.systolic_bp,
-          diastolic: vitals.diastolic_bp,
-          heartRate: vitals.heart_rate || undefined,
-          measuredAt: vitals.timestamp,
-          deviceModel: 'BPM Connect',
-          connectionStatus: 'Connected',
-        });
-      } else {
+      const bpData = await response.json();
+      console.log('=== [WithingsDeviceReadings] RAW BACKEND RESPONSE ===');
+      console.log('Full response:', JSON.stringify(bpData, null, 2));
+      console.log('Systolic:', bpData.systolic);
+      console.log('Diastolic:', bpData.diastolic);
+      console.log('Heart Rate:', bpData.heart_rate);
+      console.log('Timestamp:', bpData.timestamp);
+
+      if (!bpData.success || !bpData.systolic || !bpData.diastolic) {
+        console.log('[WithingsDeviceReadings] No BP data in response');
         setBpStatus('Connected');
         setErrors(prev => ({ ...prev, bp: 'Awaiting automatic data push from Withings. Please ensure the patient has recently taken a measurement on their BPM Connect.' }));
+        return;
       }
+
+      console.log('=== [WithingsDeviceReadings] SETTING BP READING STATE ===');
+      const reading = {
+        systolic: bpData.systolic,
+        diastolic: bpData.diastolic,
+        heartRate: bpData.heart_rate || undefined,
+        measuredAt: new Date(bpData.timestamp * 1000).toISOString(),
+        deviceModel: 'BPM Connect',
+        connectionStatus: 'Connected' as const,
+      };
+      console.log('Reading object:', JSON.stringify(reading, null, 2));
+
+      setBpStatus('Connected');
+      setBpReading(reading);
+
+      console.log('=== [WithingsDeviceReadings] BP FETCH COMPLETE ===');
     } catch (error: any) {
-      console.error('Error fetching BP reading:', error);
+      console.error('[WithingsDeviceReadings] Error fetching BP reading:', error);
       setBpStatus('Disconnected');
       setErrors(prev => ({ ...prev, bp: error.message }));
     } finally {
@@ -376,7 +406,14 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
     return 'text-green-600';
   };
 
+  console.log('=== [WithingsDeviceReadings] RENDER CYCLE ===');
+  console.log('Loading:', loading);
+  console.log('BP Status:', bpStatus);
+  console.log('BP Reading:', JSON.stringify(bpReading, null, 2));
+  console.log('BP Error:', errors.bp);
+
   if (loading) {
+    console.log('[WithingsDeviceReadings] Rendering LOADING state');
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-center py-8">
@@ -386,6 +423,8 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       </div>
     );
   }
+
+  console.log('[WithingsDeviceReadings] Rendering MAIN UI');
 
   return (
     <div className="space-y-4">
@@ -494,6 +533,7 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
         {bpReading && bpStatus === 'Connected' ? (
           <div className="space-y-3">
+            {console.log('[WithingsDeviceReadings] Rendering BP values:', bpReading.systolic, '/', bpReading.diastolic, 'HR:', bpReading.heartRate)}
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white rounded-lg p-3 border border-gray-200">
                 <p className="text-xs text-gray-500 mb-1">Systolic</p>
