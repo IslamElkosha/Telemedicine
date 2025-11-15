@@ -257,12 +257,15 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       }
 
       console.log('[WithingsDeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
+      console.log('[WithingsDeviceReadings] User ID:', session.user.id);
+      console.log('[WithingsDeviceReadings] Session token (first 30 chars):', session.access_token.substring(0, 30) + '...');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const cacheBuster = Date.now();
       const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading?_t=${cacheBuster}`;
 
       console.log('[WithingsDeviceReadings] Request URL:', apiUrl);
+      console.log('[WithingsDeviceReadings] Authorization header will be:', `Bearer ${session.access_token.substring(0, 30)}...`);
 
       let response;
       try {
@@ -297,10 +300,28 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       }
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[WithingsDeviceReadings] Error response:', errorData);
+        console.error('=== [WithingsDeviceReadings] HTTP ERROR ===');
+        console.error('Status code:', response.status);
+        console.error('Status text:', response.statusText);
+
+        let errorData;
+        try {
+          errorData = await response.json();
+          console.error('Error response body:', JSON.stringify(errorData, null, 2));
+        } catch (parseError) {
+          console.error('Could not parse error response as JSON');
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+        }
+
         setBpStatus('Disconnected');
-        setErrors(prev => ({ ...prev, bp: errorData.error || 'Failed to fetch BP data' }));
+
+        let errorMessage = errorData.error || `HTTP ${response.status} error`;
+        if (errorData.details) {
+          console.error('Additional error details:', errorData.details);
+          errorMessage += ` - ${JSON.stringify(errorData.details)}`;
+        }
+
+        setErrors(prev => ({ ...prev, bp: errorMessage }));
         return;
       }
 
