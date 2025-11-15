@@ -317,13 +317,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('SORTING measurement groups by date (descending)...');
-    bpGroups.sort((a: any, b: any) => b.date - a.date);
+    console.log('=== BEFORE SORTING - All measurement timestamps ===');
+    bpGroups.forEach((group: any, idx: number) => {
+      console.log(`  [${idx}] Date: ${group.date} (${new Date(group.date * 1000).toISOString()}) - grpid: ${group.grpid}`);
+    });
 
-    console.log('Measurement groups sorted. First 3 timestamps:');
-    for (let i = 0; i < Math.min(3, bpGroups.length); i++) {
-      console.log(`  ${i + 1}. Date: ${bpGroups[i].date} (${new Date(bpGroups[i].date * 1000).toISOString()})`);
-    }
+    console.log('=== SORTING measurement groups by date (DESCENDING - newest first) ===');
+    bpGroups.sort((a: any, b: any) => {
+      const diff = b.date - a.date;
+      console.log(`  Comparing: ${a.date} vs ${b.date} → diff = ${diff} (${diff > 0 ? 'b is newer' : 'a is newer'})`);
+      return diff;
+    });
+
+    console.log('=== AFTER SORTING - Sorted timestamps ===');
+    bpGroups.forEach((group: any, idx: number) => {
+      console.log(`  [${idx}] Date: ${group.date} (${new Date(group.date * 1000).toISOString()}) - grpid: ${group.grpid}`);
+    });
+
+    console.log('=== SELECTING FIRST ITEM (NEWEST) ===');
 
     const latestGroup = bpGroups[0];
     console.log('Latest measurement group:');
@@ -339,10 +350,23 @@ Deno.serve(async (req: Request) => {
       deviceModel: latestGroup.model || 'BPM Connect',
     };
 
+    console.log('=== PARSING MEASURES FROM NEWEST GROUP ===');
+    console.log('Number of measures in this group:', latestGroup.measures.length);
+
     for (const measure of latestGroup.measures) {
       const rawValue = measure.value * Math.pow(10, measure.unit);
-      console.log(`  - Measure type ${measure.type}: ${measure.value} * 10^${measure.unit} = ${rawValue}`);
-      
+
+      let measureName = 'Unknown';
+      if (measure.type === 9) measureName = 'Diastolic BP';
+      if (measure.type === 10) measureName = 'Systolic BP';
+      if (measure.type === 11) measureName = 'Heart Rate';
+
+      console.log(`  → Type ${measure.type} (${measureName}):`);
+      console.log(`     Raw value: ${measure.value}`);
+      console.log(`     Unit exponent: ${measure.unit}`);
+      console.log(`     Calculation: ${measure.value} × 10^(${measure.unit}) = ${measure.value} × ${Math.pow(10, measure.unit)} = ${rawValue}`);
+      console.log(`     Final value: ${Math.round(rawValue)}`);
+
       if (measure.type === 9) {
         reading.diastolic = Math.round(rawValue);
       } else if (measure.type === 10) {
@@ -352,10 +376,11 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log('Parsed reading:');
-    console.log('  - Systolic:', reading.systolic, 'mmHg');
-    console.log('  - Diastolic:', reading.diastolic, 'mmHg');
+    console.log('=== FINAL PARSED READING ===');
+    console.log('  - Systolic BP:', reading.systolic, 'mmHg');
+    console.log('  - Diastolic BP:', reading.diastolic, 'mmHg');
     console.log('  - Heart Rate:', reading.heartRate, 'bpm');
+    console.log('  - Measured at:', reading.measuredAt);
 
     const dbRecord = {
       user_id: user.id,
