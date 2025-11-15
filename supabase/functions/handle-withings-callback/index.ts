@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const WITHINGS_API_BASE = 'https://wbsapi.withings.net';
-const WITHINGS_TOKEN_PATH = '/oauth2/token';
+const WITHINGS_TOKEN_PATH = '/v2/oauth2';
 const WITHINGS_TOKEN_URL = WITHINGS_API_BASE + WITHINGS_TOKEN_PATH;
 
 Deno.serve(async (req: Request) => {
@@ -59,19 +59,27 @@ Deno.serve(async (req: Request) => {
     console.log('  - Client ID:', WITHINGS_CLIENT_ID.substring(0, 15) + '...');
     console.log('  - Redirect URI:', redirectUri);
     console.log('  - User ID:', userId);
+    console.log('  - Authorization Code (first 20 chars):', code.substring(0, 20) + '...');
 
-    const tokenRequestBody = {
-      action: 'requesttoken',
-      grant_type: 'authorization_code',
-      client_id: WITHINGS_CLIENT_ID,
-      client_secret: WITHINGS_CLIENT_SECRET,
-      code: code,
-      redirect_uri: redirectUri,
-    };
-
-    const formBody = new URLSearchParams(tokenRequestBody);
+    const formBody = new URLSearchParams();
+    formBody.append('action', 'requesttoken');
+    formBody.append('grant_type', 'authorization_code');
+    formBody.append('client_id', WITHINGS_CLIENT_ID);
+    formBody.append('client_secret', WITHINGS_CLIENT_SECRET);
+    formBody.append('code', code);
+    formBody.append('redirect_uri', redirectUri);
 
     console.log('Sending token exchange request to Withings...');
+    console.log('Request body parameters:', {
+      action: 'requesttoken',
+      grant_type: 'authorization_code',
+      client_id: WITHINGS_CLIENT_ID.substring(0, 15) + '...',
+      client_secret: WITHINGS_CLIENT_SECRET.substring(0, 10) + '...',
+      code: code.substring(0, 20) + '...',
+      redirect_uri: redirectUri,
+    });
+    console.log('Request body (URL-encoded):', formBody.toString());
+
     const tokenResponse = await fetch(WITHINGS_TOKEN_URL, {
       method: 'POST',
       headers: {

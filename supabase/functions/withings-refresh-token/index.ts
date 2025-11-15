@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const WITHINGS_API_BASE = 'https://wbsapi.withings.net';
-const WITHINGS_TOKEN_PATH = '/oauth2/token';
+const WITHINGS_TOKEN_PATH = '/v2/oauth2';
 const WITHINGS_TOKEN_URL = WITHINGS_API_BASE + WITHINGS_TOKEN_PATH;
 
 Deno.serve(async (req: Request) => {
@@ -62,17 +62,12 @@ Deno.serve(async (req: Request) => {
 
     console.log('Refreshing token for user:', user.id);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
-
-    const refreshParams = new URLSearchParams({
-      action: 'requesttoken',
-      grant_type: 'refresh_token',
-      client_id: WITHINGS_CLIENT_ID,
-      client_secret: WITHINGS_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      refresh_token: tokenData.refresh_token,
-    });
+    const refreshParams = new URLSearchParams();
+    refreshParams.append('action', 'requesttoken');
+    refreshParams.append('grant_type', 'refresh_token');
+    refreshParams.append('client_id', WITHINGS_CLIENT_ID);
+    refreshParams.append('client_secret', WITHINGS_CLIENT_SECRET);
+    refreshParams.append('refresh_token', tokenData.refresh_token);
 
     console.log('Sending refresh request to:', WITHINGS_TOKEN_URL);
     console.log('Refresh parameters:', {
@@ -80,7 +75,6 @@ Deno.serve(async (req: Request) => {
       grant_type: 'refresh_token',
       client_id: WITHINGS_CLIENT_ID,
       client_secret: WITHINGS_CLIENT_SECRET.substring(0, 10) + '...',
-      redirect_uri: redirectUri,
       refresh_token: tokenData.refresh_token.substring(0, 20) + '...',
     });
     const refreshResponse = await fetch(WITHINGS_TOKEN_URL, {
