@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Activity, Thermometer, Zap, Bluetooth, WifiOff, RefreshCw } from 'lucide-react';
+import { Heart, Activity, Thermometer, Bluetooth, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DeviceReading {
@@ -12,15 +12,25 @@ interface DeviceReading {
   connected: boolean;
 }
 
+interface BPData {
+  systolic: number;
+  diastolic: number;
+  heart_rate: number;
+  timestamp: number;
+  connectionStatus: string;
+  success: boolean;
+}
+
 const DeviceReadings: React.FC = () => {
   const [readings, setReadings] = useState<DeviceReading[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDeviceReadings();
+    fetchLatestBPReading();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      fetchDeviceReadings();
+      fetchLatestBPReading();
     });
 
     const channel = supabase
@@ -33,8 +43,8 @@ const DeviceReadings: React.FC = () => {
           table: 'user_vitals_live',
         },
         () => {
-          console.log('Real-time vitals update received in DeviceReadings');
-          fetchDeviceReadings();
+          console.log('[DeviceReadings] Real-time vitals update received');
+          fetchLatestBPReading();
         }
       )
       .subscribe();
@@ -45,24 +55,53 @@ const DeviceReadings: React.FC = () => {
     };
   }, []);
 
-  const fetchDeviceReadings = async () => {
+  const fetchLatestBPReading = async () => {
     try {
+      setLoading(true);
+      setError(null);
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.error('[DeviceReadings] No active session');
+        setReadings(getEmptyReadings());
         setLoading(false);
         return;
       }
 
-      const { data: vitals, error } = await supabase
-        .from('user_vitals_live')
-        .select('systolic_bp, diastolic_bp, heart_rate, temperature_c, timestamp, device_type')
-        .eq('user_id', session.user.id)
-        .order('timestamp', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      console.log('[DeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
 
-      if (error) {
-        console.error('Error fetching device readings:', error);
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading`;
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('[DeviceReadings] Edge Function response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[DeviceReadings] Edge Function error:', errorData);
+
+        if (errorData.needsReconnect || errorData.error?.includes('No Withings connection')) {
+          setError('Please connect your Withings device first');
+          setReadings(getEmptyReadings());
+          setLoading(false);
+          return;
+        }
+
+        throw new Error(errorData.error || 'Failed to fetch BP data');
+      }
+
+      const bpData: BPData = await response.json();
+      console.log('[DeviceReadings] BP Data received:', bpData);
+
+      if (!bpData.success || !bpData.systolic || !bpData.diastolic) {
+        console.log('[DeviceReadings] No BP data available');
         setReadings(getEmptyReadings());
         setLoading(false);
         return;
@@ -70,84 +109,55 @@ const DeviceReadings: React.FC = () => {
 
       const readingsData: DeviceReading[] = [];
 
-      if (vitals) {
-        console.log('Device readings fetched from database:', vitals);
+      const bpValue = `${bpData.systolic}/${bpData.diastolic}`;
+      let bpStatus: 'normal' | 'warning' | 'critical' = 'normal';
 
-        if (vitals.systolic_bp && vitals.diastolic_bp) {
-          const bpValue = `${vitals.systolic_bp}/${vitals.diastolic_bp}`;
-          let bpStatus: 'normal' | 'warning' | 'critical' = 'normal';
-
-          if (vitals.systolic_bp >= 180 || vitals.diastolic_bp >= 120) {
-            bpStatus = 'critical';
-          } else if (vitals.systolic_bp >= 140 || vitals.diastolic_bp >= 90) {
-            bpStatus = 'warning';
-          } else if (vitals.systolic_bp < 90 || vitals.diastolic_bp < 60) {
-            bpStatus = 'warning';
-          }
-
-          readingsData.push({
-            deviceType: 'Blood Pressure Monitor',
-            reading: bpValue,
-            unit: 'mmHg',
-            timestamp: new Date(vitals.timestamp),
-            status: bpStatus,
-            icon: Heart,
-            connected: true
-          });
-        }
-
-        if (vitals.heart_rate) {
-          let hrStatus: 'normal' | 'warning' | 'critical' = 'normal';
-
-          if (vitals.heart_rate > 100 || vitals.heart_rate < 60) {
-            hrStatus = 'warning';
-          }
-          if (vitals.heart_rate > 120 || vitals.heart_rate < 50) {
-            hrStatus = 'critical';
-          }
-
-          readingsData.push({
-            deviceType: 'Heart Rate Monitor',
-            reading: vitals.heart_rate.toString(),
-            unit: 'BPM',
-            timestamp: new Date(vitals.timestamp),
-            status: hrStatus,
-            icon: Activity,
-            connected: true
-          });
-        }
-
-        if (vitals.temperature_c) {
-          const tempF = (vitals.temperature_c * 9/5) + 32;
-          let tempStatus: 'normal' | 'warning' | 'critical' = 'normal';
-
-          if (vitals.temperature_c >= 39.5) {
-            tempStatus = 'critical';
-          } else if (vitals.temperature_c >= 38.0 || vitals.temperature_c < 35.0) {
-            tempStatus = 'warning';
-          }
-
-          readingsData.push({
-            deviceType: 'Digital Thermometer',
-            reading: tempF.toFixed(1),
-            unit: '°F',
-            timestamp: new Date(vitals.timestamp),
-            status: tempStatus,
-            icon: Thermometer,
-            connected: true
-          });
-        }
+      if (bpData.systolic >= 180 || bpData.diastolic >= 120) {
+        bpStatus = 'critical';
+      } else if (bpData.systolic >= 140 || bpData.diastolic >= 90) {
+        bpStatus = 'warning';
+      } else if (bpData.systolic < 90 || bpData.diastolic < 60) {
+        bpStatus = 'warning';
       }
 
-      if (readingsData.length === 0) {
-        setReadings(getEmptyReadings());
-      } else {
-        setReadings(readingsData);
+      readingsData.push({
+        deviceType: 'Blood Pressure Monitor',
+        reading: bpValue,
+        unit: 'mmHg',
+        timestamp: new Date(bpData.timestamp * 1000),
+        status: bpStatus,
+        icon: Heart,
+        connected: true
+      });
+
+      if (bpData.heart_rate) {
+        let hrStatus: 'normal' | 'warning' | 'critical' = 'normal';
+
+        if (bpData.heart_rate > 100 || bpData.heart_rate < 60) {
+          hrStatus = 'warning';
+        }
+        if (bpData.heart_rate > 120 || bpData.heart_rate < 50) {
+          hrStatus = 'critical';
+        }
+
+        readingsData.push({
+          deviceType: 'Heart Rate Monitor',
+          reading: bpData.heart_rate.toString(),
+          unit: 'BPM',
+          timestamp: new Date(bpData.timestamp * 1000),
+          status: hrStatus,
+          icon: Activity,
+          connected: true
+        });
       }
 
+      console.log('[DeviceReadings] Displaying readings:', readingsData);
+      setReadings(readingsData);
       setLoading(false);
-    } catch (error) {
-      console.error('Error in fetchDeviceReadings:', error);
+
+    } catch (error: any) {
+      console.error('[DeviceReadings] Error fetching BP reading:', error);
+      setError(error.message || 'Failed to fetch device data');
       setReadings(getEmptyReadings());
       setLoading(false);
     }
@@ -172,15 +182,6 @@ const DeviceReadings: React.FC = () => {
         status: 'normal',
         icon: Activity,
         connected: false
-      },
-      {
-        deviceType: 'Digital Thermometer',
-        reading: '--',
-        unit: '°F',
-        timestamp: new Date(),
-        status: 'normal',
-        icon: Thermometer,
-        connected: false
       }
     ];
   };
@@ -194,7 +195,7 @@ const DeviceReadings: React.FC = () => {
         <div className="p-6">
           <div className="flex items-center justify-center py-8">
             <RefreshCw className="h-6 w-6 text-blue-600 animate-spin" />
-            <span className="ml-2 text-gray-600">Loading device readings...</span>
+            <span className="ml-2 text-gray-600">Fetching latest data from Withings...</span>
           </div>
         </div>
       </div>
@@ -208,10 +209,11 @@ const DeviceReadings: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900">Live Device Readings</h3>
           <div className="flex items-center space-x-3">
             <button
-              onClick={fetchDeviceReadings}
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center space-x-1"
+              onClick={fetchLatestBPReading}
+              disabled={loading}
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center space-x-1 disabled:opacity-50"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </button>
             <div className="flex items-center space-x-2">
@@ -225,7 +227,17 @@ const DeviceReadings: React.FC = () => {
       </div>
 
       <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-900">Error</p>
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {readings.map((reading, index) => (
             <div key={index} className="bg-gray-50 p-4 rounded-lg relative hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-2">
@@ -246,7 +258,7 @@ const DeviceReadings: React.FC = () => {
 
               <div className="mb-3">
                 <span className="text-2xl font-bold text-gray-900">
-                  {reading.connected ? reading.reading : '--'}
+                  {reading.reading}
                 </span>
                 <span className="text-sm text-gray-600 ml-1">{reading.unit}</span>
               </div>
@@ -258,7 +270,7 @@ const DeviceReadings: React.FC = () => {
                   reading.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
                   'bg-red-100 text-red-800'
                 }`}>
-                  {!reading.connected ? 'Awaiting Reading' : reading.status}
+                  {!reading.connected ? 'Awaiting Data' : reading.status}
                 </span>
                 <span className="text-xs text-gray-500">
                   {reading.connected ? reading.timestamp.toLocaleTimeString() : 'No data'}
@@ -271,7 +283,7 @@ const DeviceReadings: React.FC = () => {
         {readings.some(r => !r.connected) && (
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
-              <strong>Connect your devices:</strong> Data will appear automatically when your Withings devices sync measurements.
+              <strong>Connect your device:</strong> Data will appear when your Withings BPM Connect syncs measurements.
             </p>
           </div>
         )}
