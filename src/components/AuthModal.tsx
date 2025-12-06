@@ -66,9 +66,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
 
       if (result.success) {
         setSuccess(true);
+        const dashboardRoute = getRoleDashboardRoute(selectedRole);
+        console.log('[AuthModal] Login successful, redirecting to:', dashboardRoute);
         setTimeout(() => {
           onClose();
-          navigate(`/${selectedRole}`);
+          navigate(dashboardRoute);
         }, 1000);
       } else {
         setError(result.error || { message: 'Login failed' });
@@ -90,9 +92,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
       const result = await register(registrationData);
       if (result.success) {
         setSuccess(true);
+        const dashboardRoute = getRoleDashboardRoute(selectedRole);
+        console.log('[AuthModal] Registration successful, redirecting to:', dashboardRoute);
         setTimeout(() => {
           onClose();
-          navigate(`/${selectedRole}`);
+          navigate(dashboardRoute);
         }, 1500);
       } else {
         setError(result.error || { message: 'Registration failed' });
@@ -110,6 +114,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
       'freelance-tech': 'Freelance Technician'
     };
     return roleMap[role] || role;
+  };
+
+  const getRoleDashboardRoute = (role: string) => {
+    const dashboardRoutes: { [key: string]: string } = {
+      'patient': '/patient/devices',
+      'doctor': '/doctor',
+      'technician': '/technician',
+      'admin': '/admin',
+      'hospital': '/hospital',
+      'freelance-tech': '/freelance-tech'
+    };
+    return dashboardRoutes[role] || `/${role}`;
   };
 
 
