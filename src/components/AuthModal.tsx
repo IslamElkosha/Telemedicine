@@ -86,27 +86,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
     return roleMap[role] || role;
   };
 
-  // Demo credentials helper
-  const fillDemoCredentials = () => {
-    const demoCredentials: { [key: string]: { email: string; password: string } } = {
-      'patient': { email: 'patient@test.com', password: 'TestPass123!' },
-      'doctor': { email: 'doctor@test.com', password: 'TestPass123!' },
-      'technician': { email: 'tech@test.com', password: 'TestPass123!' },
-      'admin': { email: 'admin@test.com', password: 'Admin123!' },
-      'hospital': { email: 'hospital@test.com', password: 'TestPass123!' },
-      'freelance-tech': { email: 'freelance@test.com', password: 'TestPass123!' }
-    };
-    
-    const demo = demoCredentials[selectedRole];
-    if (demo) {
-      setFormData(prev => ({ 
-        ...prev, 
-        email: demo.email, 
-        password: demo.password,
-        confirmPassword: demo.password 
-      }));
-    }
-  };
 
   const getFieldError = (field: string) => {
     return error?.field === field ? error.message : null;
@@ -379,16 +358,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
           </button>
         </form>
 
-        {!loading && !success && (
-          <div className="mt-4 text-center">
-            <button
-              onClick={fillDemoCredentials}
-              className="text-sm text-blue-600 hover:text-blue-700 underline"
-            >
-              Use Demo Credentials
-            </button>
-          </div>
-        )}
 
         <div className="mt-6 text-center">
           <button
