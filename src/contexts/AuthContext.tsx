@@ -161,7 +161,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const loadUserProfile = async (userId: string, retries = 3) => {
+    console.log('[AuthContext] loadUserProfile started for userId:', userId);
+
     for (let i = 0; i < retries; i++) {
+      console.log(`[AuthContext] loadUserProfile - Attempt ${i + 1}/${retries}`);
+      const queryStart = Date.now();
+
       const { data, error } = await supabase
         .from('users')
         .select(`
@@ -172,6 +177,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         `)
         .eq('id', userId)
         .maybeSingle();
+
+      const queryTime = Date.now() - queryStart;
+      console.log(`[AuthContext] loadUserProfile - Query completed in ${queryTime}ms`, {
+        hasData: !!data,
+        hasError: !!error,
+        errorMessage: error?.message
+      });
 
       if (data && !error) {
         const profile = data.user_profiles as any;
@@ -184,7 +196,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           fallback: !reverseRoleMapping[data.role] ? 'using fallback: patient' : 'mapping found'
         });
 
+        console.log('[AuthContext] loadUserProfile - Getting auth user...');
+        const authUserStart = Date.now();
+
         const { data: { user: authUser } } = await supabase.auth.getUser();
+
+        const authUserTime = Date.now() - authUserStart;
+        console.log(`[AuthContext] loadUserProfile - Auth user fetched in ${authUserTime}ms`);
+
         const userEmail = data.email || authUser?.email || '';
         const userName = profile?.fullName || authUser?.user_metadata?.full_name || data.email?.split('@')[0] || 'User';
 
@@ -213,9 +232,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (i < retries - 1) {
+        console.log('[AuthContext] loadUserProfile - Retrying after 500ms delay...');
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
+
+    console.error('[AuthContext] loadUserProfile - Failed after all retries');
   };
 
   const login = async (email: string, password: string, role: User['role']): Promise<{ success: boolean; error?: AuthError }> => {
@@ -253,23 +275,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       console.log('[AuthContext] Calling supabase.auth.signInWithPassword...');
+      const startTime = Date.now();
 
-      const loginPromise = supabase.auth.signInWithPassword(loginPayload);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Login request timed out after 10 seconds')), 10000)
-      );
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword(loginPayload);
 
-      const { data: authData, error: authError } = await Promise.race([
-        loginPromise,
-        timeoutPromise
-      ]) as any;
-
+      const elapsedTime = Date.now() - startTime;
       console.log('[AuthContext] Supabase response received:', {
         hasData: !!authData,
         hasUser: !!authData?.user,
         hasError: !!authError,
         errorMessage: authError?.message,
-        errorStatus: authError?.status
+        errorStatus: authError?.status,
+        elapsedTimeMs: elapsedTime,
+        elapsedTimeSec: (elapsedTime / 1000).toFixed(2) + 's'
       });
 
       if (authError) {
@@ -281,20 +299,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { success: false, error: { message: 'Login failed' } };
       }
 
+      console.log('[AuthContext] Fetching user role from database...');
+      const roleQueryStart = Date.now();
+
       const { data: userData } = await supabase
         .from('users')
         .select('role')
         .eq('id', authData.user.id)
         .maybeSingle();
 
+      const roleQueryTime = Date.now() - roleQueryStart;
+      console.log('[AuthContext] Role query completed:', {
+        elapsedMs: roleQueryTime,
+        hasUserData: !!userData,
+        role: userData?.role
+      });
+
       const userRole = userData ? reverseRoleMapping[userData.role] : null;
 
       if (userRole !== role) {
+        console.log('[AuthContext] Role mismatch, signing out');
         await supabase.auth.signOut();
         return { success: false, error: { message: `This account is not registered as a ${role}` } };
       }
 
+      console.log('[AuthContext] Loading user profile...');
+      const profileLoadStart = Date.now();
+
       await loadUserProfile(authData.user.id);
+
+      const profileLoadTime = Date.now() - profileLoadStart;
+      console.log('[AuthContext] Profile loaded:', {
+        elapsedMs: profileLoadTime
+      });
+
+      console.log('[AuthContext] Login completed successfully, total time:', {
+        totalMs: Date.now() - startTime,
+        totalSec: ((Date.now() - startTime) / 1000).toFixed(2) + 's'
+      });
+
       return { success: true };
     } catch (error) {
       console.error('[AuthContext] Login error:', error);
