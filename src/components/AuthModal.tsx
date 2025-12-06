@@ -35,9 +35,35 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
     e.preventDefault();
     setError(null);
     setSuccess(false);
-    
+
+    console.log('[AuthModal] Form submission started');
+    console.log('[AuthModal] isLogin:', isLogin);
+    console.log('[AuthModal] Form data state:', {
+      email: formData.email,
+      emailType: typeof formData.email,
+      emailLength: formData.email?.length,
+      emailValue: formData.email,
+      password: formData.password ? '***' + formData.password.slice(-3) : 'undefined',
+      passwordType: typeof formData.password,
+      passwordLength: formData.password?.length,
+      selectedRole: selectedRole
+    });
+
     if (isLogin) {
+      console.log('[AuthModal] Calling login function with:', {
+        email: formData.email,
+        password: formData.password ? 'present' : 'missing',
+        role: selectedRole
+      });
+
       const result = await login(formData.email, formData.password, selectedRole as any);
+
+      console.log('[AuthModal] Login result:', {
+        success: result.success,
+        hasError: !!result.error,
+        errorMessage: result.error?.message
+      });
+
       if (result.success) {
         setSuccess(true);
         setTimeout(() => {

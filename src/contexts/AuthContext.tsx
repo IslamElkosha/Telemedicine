@@ -187,20 +187,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(true);
 
     try {
+      console.log('[AuthContext] Login attempt started');
+      console.log('[AuthContext] Received parameters:', {
+        email: email,
+        emailType: typeof email,
+        emailLength: email?.length,
+        password: password ? '***' + password.slice(-3) : 'undefined',
+        passwordType: typeof password,
+        passwordLength: password?.length,
+        role: role
+      });
+
       if (!validateEmail(email)) {
+        console.error('[AuthContext] Email validation failed:', email);
         return { success: false, error: { field: 'email', message: 'Please enter a valid email address' } };
       }
 
       if (!password) {
+        console.error('[AuthContext] Password is missing or empty');
         return { success: false, error: { field: 'password', message: 'Password is required' } };
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const loginPayload = {
         email: email.toLowerCase(),
-        password
+        password: password
+      };
+
+      console.log('[AuthContext] Prepared login payload:', {
+        email: loginPayload.email,
+        password: loginPayload.password ? '***' + loginPayload.password.slice(-3) : 'missing',
+        passwordLength: loginPayload.password?.length
+      });
+
+      console.log('[AuthContext] Calling supabase.auth.signInWithPassword...');
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword(loginPayload);
+
+      console.log('[AuthContext] Supabase response received:', {
+        hasData: !!authData,
+        hasUser: !!authData?.user,
+        hasError: !!authError,
+        errorMessage: authError?.message,
+        errorStatus: authError?.status
       });
 
       if (authError) {
+        console.error('[AuthContext] Authentication error:', authError);
         return { success: false, error: { message: 'Invalid email or password' } };
       }
 
