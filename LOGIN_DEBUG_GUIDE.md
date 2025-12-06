@@ -100,10 +100,11 @@ To test the login functionality:
 - **Session Storage:** localStorage
 - **Auto Refresh:** Enabled
 - **Persist Session:** Enabled
+- **API Key Format:** Publishable Key (sb_publishable_...)
 
 ## Important Notes
 
-1. **Environment Variables:** The frontend uses JWT-based keys (starting with "eyJ") which are the standard format supported by @supabase/supabase-js
+1. **Environment Variables:** The frontend uses the newer publishable key format (starting with "sb_publishable_") which is Supabase's recommended approach for improved security and key management
 
 2. **No Test Users:** All test accounts have been removed. You must register new users through the application.
 

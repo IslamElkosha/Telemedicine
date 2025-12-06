@@ -2,11 +2,12 @@
 
 ## Connection Details
 
-**Status:** Connected and Verified - Production Ready
+**Status:** ✅ ACTIVE - Connected and Verified (Updated: Dec 6, 2025)
 
 **Environment:** Production
 **Project URL:** https://kwlommrclqhpvthqxcge.supabase.co
 **Project Reference:** kwlommrclqhpvthqxcge
+**API Key Format:** Publishable Key (sb_publishable_...)
 
 ## Database Statistics
 
@@ -100,16 +101,17 @@ RLS is enabled on all sensitive tables:
 ## Frontend Configuration
 
 Environment variables are properly configured in `.env`:
-- `VITE_SUPABASE_URL` - Set
-- `VITE_SUPABASE_ANON_KEY` - Set
-- `VITE_SUPABASE_SERVICE_ROLE_KEY` - Set
+- `VITE_SUPABASE_URL` - ✅ https://kwlommrclqhpvthqxcge.supabase.co
+- `VITE_SUPABASE_ANON_KEY` - ✅ sb_publishable_MvxfTrIGw_nLPpfnQZvsDg_Jk5Yp_js (Publishable Key Format)
+- `VITE_SUPABASE_SERVICE_ROLE_KEY` - ✅ sb_secret_hX9AVsipjQuqUJGl4MOCTA_A93W9yNv
 
 The Supabase client (`src/lib/supabase.ts`) is configured with:
 - Auto refresh tokens: Enabled
 - Persist session: Enabled
-- Detect session in URL: Enabled
+- Detect session in URL: Disabled (for security)
 - Auth headers helper function: Implemented
 - Edge function caller utility: Implemented
+- Debug logging: Enabled for troubleshooting
 
 ## Connection Verification
 
@@ -145,3 +147,25 @@ Your application is fully connected to Supabase production and ready for real us
 3. ✅ Verified authentication exclusively uses Supabase Auth
 4. ✅ Updated to production Supabase instance (kwlommrclqhpvthqxcge)
 5. ✅ Confirmed RLS policies are active on all sensitive tables
+6. ✅ **CRITICAL FIX:** Updated to use valid publishable API key (Dec 6, 2025)
+   - Previous JWT-based key was invalid/revoked
+   - Now using Supabase's recommended publishable key format
+   - Resolves "Invalid API key (401)" authentication errors
+
+## API Key Migration (Dec 6, 2025)
+
+**Issue:** Authentication was failing with "Invalid API key (401)" error
+
+**Root Cause:** The JWT-based anon key was either revoked or invalid
+
+**Solution:** Migrated to Supabase's newer publishable key format
+- Old Format: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (JWT-based)
+- New Format: `sb_publishable_MvxfTrIGw_nLPpfnQZvsDg_Jk5Yp_js` (Publishable Key)
+
+**Benefits of Publishable Keys:**
+1. Better security with built-in browser protections
+2. Independent key rotation without affecting JWT secrets
+3. Clearer privilege level designation
+4. Recommended by Supabase for all new projects
+
+**Verification:** All authentication operations now work correctly without 401 errors
