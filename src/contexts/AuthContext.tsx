@@ -148,10 +148,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const profile = data.user_profiles as any;
         const userRole = reverseRoleMapping[data.role] || 'patient';
 
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const userEmail = data.email || authUser?.email || '';
+        const userName = profile?.fullName || authUser?.user_metadata?.full_name || data.email?.split('@')[0] || 'User';
+
         setUser({
           id: data.id,
-          name: profile?.fullName || '',
-          email: data.email,
+          name: userName,
+          email: userEmail,
           role: userRole,
           avatar: profile?.avatarUrl,
           specialty: data.doctors?.specialty,

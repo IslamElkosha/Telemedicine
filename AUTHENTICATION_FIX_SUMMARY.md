@@ -1,7 +1,16 @@
 # Authentication Fix Summary
 
-## Problem Identified
-The 401 Unauthorized errors on Edge Function calls were occurring due to missing or invalid JWT tokens in the Authorization headers.
+## Problems Identified & Fixed
+
+### Issue 1: Missing user_profiles Entry
+The patient test user was missing a record in the `user_profiles` table, causing login to fail when the system tried to load the user's profile information.
+
+**Fixed by:** Adding the missing user_profiles record for patient@test.com
+
+### Issue 2: 401 Unauthorized on Edge Functions
+Edge Function calls were failing due to missing or improperly configured JWT tokens in the Authorization headers.
+
+**Fixed by:** Adding comprehensive authentication headers and detailed logging
 
 ## Changes Implemented
 
@@ -104,6 +113,40 @@ When authentication is working correctly:
 4. After authorization, user returns to the application
 5. Withings devices show as "Connected"
 
+## Test User Credentials
+
+You can now log in with these test accounts:
+
+### Patient Account
+- **Email:** patient@test.com
+- **Password:** TestPass123!
+- **Role:** Patient
+
+### Doctor Account
+- **Email:** doctor@test.com
+- **Password:** TestPass123!
+- **Role:** Doctor
+
+### Technician Account
+- **Email:** tech@test.com
+- **Password:** TestPass123!
+- **Role:** Technician
+
+### Admin Account
+- **Email:** admin@test.com
+- **Password:** Admin123!
+- **Role:** Admin
+
+### Hospital Admin Account
+- **Email:** hospital@test.com
+- **Password:** TestPass123!
+- **Role:** Hospital
+
+### Freelance Technician Account
+- **Email:** freelance@test.com
+- **Password:** TestPass123!
+- **Role:** Freelance Technician
+
 ## Next Steps If Issues Persist
 
 1. Verify the Supabase keys are correct in the Dashboard
@@ -111,3 +154,4 @@ When authentication is working correctly:
 3. Ensure user is logged in with a valid session
 4. Try logging out and back in to refresh the session
 5. Check browser network tab for the actual request/response
+6. Review browser console for detailed authentication logs
