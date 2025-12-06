@@ -89,12 +89,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
   // Demo credentials helper
   const fillDemoCredentials = () => {
     const demoCredentials: { [key: string]: { email: string; password: string } } = {
-      'patient': { email: 'patient@test.com', password: 'demo123' },
-      'doctor': { email: 'doctor@test.com', password: 'demo123' },
-      'technician': { email: 'tech@test.com', password: 'demo123' },
-      'admin': { email: 'admin@test.com', password: 'admin2025!' },
-      'hospital': { email: 'hospital@test.com', password: 'demo123' },
-      'freelance-tech': { email: 'freelance@test.com', password: 'demo123' }
+      'patient': { email: 'patient@test.com', password: 'TestPass123!' },
+      'doctor': { email: 'doctor@test.com', password: 'TestPass123!' },
+      'technician': { email: 'tech@test.com', password: 'TestPass123!' },
+      'admin': { email: 'admin@test.com', password: 'Admin123!' },
+      'hospital': { email: 'hospital@test.com', password: 'TestPass123!' },
+      'freelance-tech': { email: 'freelance@test.com', password: 'TestPass123!' }
     };
     
     const demo = demoCredentials[selectedRole];
