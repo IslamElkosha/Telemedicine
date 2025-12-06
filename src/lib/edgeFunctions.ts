@@ -38,26 +38,52 @@ export async function callEdgeFunction<T = any>(
     let accessToken: string | undefined;
 
     if (requiresAuth) {
+      console.log(`[EdgeFunction] Getting fresh session for ${functionName}...`);
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
       if (sessionError) {
         console.error('[EdgeFunction] Session error:', sessionError);
-        return {
-          success: false,
-          error: `Session error: ${sessionError.message}`,
-        };
-      }
+        console.error('[EdgeFunction] Attempting to refresh session...');
 
-      if (!session || !session.access_token) {
-        console.error('[EdgeFunction] No active session or access token found');
-        return {
-          success: false,
-          error: 'Please log in to continue. If already logged in, try refreshing the page.',
-        };
-      }
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
 
-      accessToken = session.access_token;
-      console.log(`[EdgeFunction] Calling ${functionName} with authenticated session (user: ${session.user.id})`);
+        if (refreshError || !refreshedSession) {
+          console.error('[EdgeFunction] Session refresh failed:', refreshError);
+
+          window.location.href = '/';
+
+          return {
+            success: false,
+            error: 'Session expired. Please log in again.',
+          };
+        }
+
+        accessToken = refreshedSession.access_token;
+        console.log(`[EdgeFunction] Session refreshed successfully for ${functionName}`);
+      } else if (!session || !session.access_token) {
+        console.error('[EdgeFunction] No active session found');
+
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+
+        if (refreshError || !refreshedSession) {
+          console.error('[EdgeFunction] No valid session available. Redirecting to login...');
+
+          window.location.href = '/';
+
+          return {
+            success: false,
+            error: 'Please log in to continue.',
+          };
+        }
+
+        accessToken = refreshedSession.access_token;
+        console.log(`[EdgeFunction] New session obtained for ${functionName}`);
+      } else {
+        accessToken = session.access_token;
+        console.log(`[EdgeFunction] Using existing valid session for ${functionName} (user: ${session.user.id})`);
+        console.log(`[EdgeFunction] Token preview: ${accessToken.substring(0, 20)}...`);
+      }
     } else {
       console.log(`[EdgeFunction] Calling ${functionName} without authentication`);
     }
@@ -65,6 +91,7 @@ export async function callEdgeFunction<T = any>(
     const headers: Record<string, string> = {
       'apikey': supabaseAnonKey,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
     };
@@ -81,6 +108,7 @@ export async function callEdgeFunction<T = any>(
     console.log(`[EdgeFunction] Headers:`, {
       hasAuth: !!headers['Authorization'],
       hasApikey: !!headers['apikey'],
+      hasAccept: !!headers['Accept'],
       hasCacheControl: !!headers['Cache-Control'],
       hasPragma: !!headers['Pragma'],
     });
