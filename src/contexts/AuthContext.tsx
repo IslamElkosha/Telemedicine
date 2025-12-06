@@ -119,19 +119,24 @@ const validateLicense = (license: string): { isValid: boolean; message?: string 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadingProfileRef = React.useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
       try {
+        console.log('[AuthContext] Initializing auth...');
         const { data: { session } } = await supabase.auth.getSession();
 
         if (mounted) {
           if (session?.user) {
+            console.log('[AuthContext] Session found, loading profile for:', session.user.id);
             await loadUserProfile(session.user.id);
+          } else {
+            console.log('[AuthContext] No session found');
+            setLoading(false);
           }
-          setLoading(false);
         }
       } catch (error) {
         console.error('[AuthContext] Error initializing auth:', error);
@@ -143,153 +148,303 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AuthContext] Auth state changed:', event);
       if (mounted) {
         if (session?.user) {
+          console.log('[AuthContext] Session exists, loading profile');
           await loadUserProfile(session.user.id);
         } else {
+          console.log('[AuthContext] No session, clearing user');
           setUser(null);
+          setLoading(false);
         }
-        setLoading(false);
       }
     });
 
     return () => {
+      console.log('[AuthContext] Cleaning up subscriptions');
       mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
   const loadUserProfile = async (userId: string, retries = 3) => {
-    console.log('[AuthContext] loadUserProfile started for userId:', userId);
-
-    for (let i = 0; i < retries; i++) {
-      console.log(`[AuthContext] loadUserProfile - Attempt ${i + 1}/${retries}`);
-      const queryStart = Date.now();
-
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      const queryTime = Date.now() - queryStart;
-      console.log(`[AuthContext] loadUserProfile - User query completed in ${queryTime}ms`, {
-        hasData: !!userData,
-        hasError: !!userError,
-        errorMessage: userError?.message
-      });
-
-      if (userError || !userData) {
-        if (i < retries - 1) {
-          console.log('[AuthContext] loadUserProfile - User query failed, retrying after 500ms delay...');
-          await new Promise(resolve => setTimeout(resolve, 500));
-          continue;
-        } else {
-          console.error('[AuthContext] loadUserProfile - Failed to fetch user data after all retries');
-          return;
-        }
-      }
-
-      const profileQueryStart = Date.now();
-      const { data: profileData } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('userId', userId)
-        .maybeSingle();
-
-      const profileQueryTime = Date.now() - profileQueryStart;
-      console.log(`[AuthContext] loadUserProfile - Profile query completed in ${profileQueryTime}ms`, {
-        hasProfile: !!profileData
-      });
-
-      let roleSpecificData: any = {};
-      const userRole = reverseRoleMapping[userData.role] || 'patient';
-
-      console.log('[AuthContext] loadUserProfile - Role mapping:', {
-        databaseRole: userData.role,
-        mappedRole: userRole
-      });
-
-      if (userRole === 'doctor') {
-        const doctorQueryStart = Date.now();
-        const { data: doctorData } = await supabase
-          .from('doctors')
-          .select('specialty, licenseNo')
-          .eq('id', userId)
-          .maybeSingle();
-
-        const doctorQueryTime = Date.now() - doctorQueryStart;
-        console.log(`[AuthContext] loadUserProfile - Doctor query completed in ${doctorQueryTime}ms`, {
-          hasData: !!doctorData,
-          specialty: doctorData?.specialty
-        });
-
-        if (doctorData) {
-          roleSpecificData = {
-            specialty: doctorData.specialty,
-            license: doctorData.licenseNo
-          };
-        }
-      } else if (userRole === 'patient') {
-        const patientQueryStart = Date.now();
-        const { data: patientData } = await supabase
-          .from('patients')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-
-        const patientQueryTime = Date.now() - patientQueryStart;
-        console.log(`[AuthContext] loadUserProfile - Patient query completed in ${patientQueryTime}ms`, {
-          hasData: !!patientData
-        });
-
-        if (patientData) {
-          roleSpecificData = {
-            bloodType: patientData.bloodType,
-            allergies: patientData.allergies,
-            heightCm: patientData.heightCm,
-            weightKg: patientData.weightKg
-          };
-        }
-      }
-
-      console.log('[AuthContext] loadUserProfile - Getting auth user...');
-      const authUserStart = Date.now();
-
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-
-      const authUserTime = Date.now() - authUserStart;
-      console.log(`[AuthContext] loadUserProfile - Auth user fetched in ${authUserTime}ms`);
-
-      const userEmail = userData.email || authUser?.email || '';
-      const userName = profileData?.fullName || authUser?.user_metadata?.full_name || userData.email?.split('@')[0] || 'User';
-
-      const userObject = {
-        id: userData.id,
-        name: userName,
-        email: userEmail,
-        role: userRole,
-        avatar: profileData?.avatarUrl,
-        phone: userData.phone,
-        createdAt: new Date(userData.createdAt),
-        isVerified: userData.status === 'ACTIVE',
-        ...roleSpecificData
-      };
-
-      console.log('[AuthContext] loadUserProfile - Setting user object:', {
-        id: userObject.id,
-        email: userObject.email,
-        role: userObject.role,
-        name: userObject.name,
-        specialty: userObject.specialty
-      });
-
-      setUser(userObject);
+    if (loadingProfileRef.current) {
+      console.log('[AuthContext] loadUserProfile already in progress, skipping duplicate call');
       return;
     }
 
-    console.error('[AuthContext] loadUserProfile - Failed after all retries');
+    loadingProfileRef.current = true;
+    console.log('[AuthContext] loadUserProfile started for userId:', userId);
+
+    try {
+      for (let i = 0; i < retries; i++) {
+        console.log(`[AuthContext] loadUserProfile - Attempt ${i + 1}/${retries}`);
+        const queryStart = Date.now();
+
+        try {
+          const queryPromise = supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Query timeout after 10 seconds')), 10000)
+          );
+
+          console.log('[AuthContext] loadUserProfile - Executing user query with timeout...');
+          const { data: userData, error: userError } = await Promise.race([
+            queryPromise,
+            timeoutPromise
+          ]) as any;
+
+          const queryTime = Date.now() - queryStart;
+          console.log(`[AuthContext] loadUserProfile - User query completed in ${queryTime}ms`);
+          console.log('[AuthContext] loadUserProfile - Query result:', {
+            hasData: !!userData,
+            hasError: !!userError,
+            errorCode: userError?.code,
+            errorMessage: userError?.message,
+            errorDetails: userError?.details,
+            userData: userData ? {
+              id: userData.id,
+              email: userData.email,
+              role: userData.role,
+              status: userData.status
+            } : null
+          });
+
+          if (userError) {
+            console.error('[AuthContext] loadUserProfile - Database error:', {
+              code: userError.code,
+              message: userError.message,
+              details: userError.details,
+              hint: userError.hint
+            });
+
+            if (i < retries - 1) {
+              console.log('[AuthContext] loadUserProfile - Retrying after 500ms delay...');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              continue;
+            } else {
+              console.error('[AuthContext] loadUserProfile - Failed after all retries due to error');
+              setLoading(false);
+              return;
+            }
+          }
+
+          if (!userData) {
+            console.error('[AuthContext] loadUserProfile - No user record found in database for userId:', userId);
+            console.error('[AuthContext] This means the user exists in Auth but not in the users table');
+            console.error('[AuthContext] Possible causes: trigger failed, RLS policy blocking, or record was deleted');
+
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            console.log('[AuthContext] Auth user data:', {
+              id: authUser?.id,
+              email: authUser?.email,
+              metadata: authUser?.user_metadata
+            });
+
+            if (i < retries - 1) {
+              console.log('[AuthContext] loadUserProfile - No data found, retrying after 1000ms delay...');
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              continue;
+            } else {
+              console.error('[AuthContext] loadUserProfile - No user record after all retries');
+              console.error('[AuthContext] Creating fallback user object from auth data');
+
+              if (authUser) {
+                const fallbackUser = {
+                  id: authUser.id,
+                  name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+                  email: authUser.email || '',
+                  role: 'patient' as const,
+                  createdAt: new Date(),
+                  isVerified: false
+                };
+                console.log('[AuthContext] Setting fallback user:', fallbackUser);
+                setUser(fallbackUser);
+                setLoading(false);
+              }
+              return;
+            }
+          }
+
+          console.log('[AuthContext] loadUserProfile - User data found, proceeding to fetch profile...');
+          const profileQueryStart = Date.now();
+
+          const profileQueryPromise = supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('userId', userId)
+            .maybeSingle();
+
+          const profileTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Profile query timeout')), 10000)
+          );
+
+          const { data: profileData, error: profileError } = await Promise.race([
+            profileQueryPromise,
+            profileTimeoutPromise
+          ]) as any;
+
+          const profileQueryTime = Date.now() - profileQueryStart;
+          console.log(`[AuthContext] loadUserProfile - Profile query completed in ${profileQueryTime}ms`, {
+            hasProfile: !!profileData,
+            hasError: !!profileError,
+            errorMessage: profileError?.message
+          });
+
+          let roleSpecificData: any = {};
+          const userRole = reverseRoleMapping[userData.role] || 'patient';
+
+          console.log('[AuthContext] loadUserProfile - Role mapping:', {
+            databaseRole: userData.role,
+            mappedRole: userRole
+          });
+
+          if (userRole === 'doctor') {
+            console.log('[AuthContext] loadUserProfile - Fetching doctor-specific data...');
+            const doctorQueryStart = Date.now();
+
+            const doctorQueryPromise = supabase
+              .from('doctors')
+              .select('specialty, licenseNo')
+              .eq('id', userId)
+              .maybeSingle();
+
+            const doctorTimeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Doctor query timeout')), 10000)
+            );
+
+            const { data: doctorData, error: doctorError } = await Promise.race([
+              doctorQueryPromise,
+              doctorTimeoutPromise
+            ]) as any;
+
+            const doctorQueryTime = Date.now() - doctorQueryStart;
+            console.log(`[AuthContext] loadUserProfile - Doctor query completed in ${doctorQueryTime}ms`, {
+              hasData: !!doctorData,
+              hasError: !!doctorError,
+              specialty: doctorData?.specialty,
+              errorMessage: doctorError?.message
+            });
+
+            if (doctorData) {
+              roleSpecificData = {
+                specialty: doctorData.specialty,
+                license: doctorData.licenseNo
+              };
+            } else {
+              console.warn('[AuthContext] loadUserProfile - No doctor record found for doctor user');
+            }
+          } else if (userRole === 'patient') {
+            console.log('[AuthContext] loadUserProfile - Fetching patient-specific data...');
+            const patientQueryStart = Date.now();
+
+            const patientQueryPromise = supabase
+              .from('patients')
+              .select('*')
+              .eq('id', userId)
+              .maybeSingle();
+
+            const patientTimeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Patient query timeout')), 10000)
+            );
+
+            const { data: patientData, error: patientError } = await Promise.race([
+              patientQueryPromise,
+              patientTimeoutPromise
+            ]) as any;
+
+            const patientQueryTime = Date.now() - patientQueryStart;
+            console.log(`[AuthContext] loadUserProfile - Patient query completed in ${patientQueryTime}ms`, {
+              hasData: !!patientData,
+              hasError: !!patientError,
+              errorMessage: patientError?.message
+            });
+
+            if (patientData) {
+              roleSpecificData = {
+                bloodType: patientData.bloodType,
+                allergies: patientData.allergies,
+                heightCm: patientData.heightCm,
+                weightKg: patientData.weightKg
+              };
+            } else {
+              console.warn('[AuthContext] loadUserProfile - No patient record found for patient user');
+            }
+          }
+
+          console.log('[AuthContext] loadUserProfile - Getting auth user metadata...');
+          const authUserStart = Date.now();
+
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+
+          const authUserTime = Date.now() - authUserStart;
+          console.log(`[AuthContext] loadUserProfile - Auth user fetched in ${authUserTime}ms`);
+
+          const userEmail = userData.email || authUser?.email || '';
+          const userName = profileData?.fullName || authUser?.user_metadata?.full_name || userData.email?.split('@')[0] || 'User';
+
+          const userObject = {
+            id: userData.id,
+            name: userName,
+            email: userEmail,
+            role: userRole,
+            avatar: profileData?.avatarUrl,
+            phone: userData.phone,
+            createdAt: new Date(userData.createdAt),
+            isVerified: userData.status === 'ACTIVE',
+            ...roleSpecificData
+          };
+
+          console.log('[AuthContext] loadUserProfile - Successfully created user object:', {
+            id: userObject.id,
+            email: userObject.email,
+            role: userObject.role,
+            name: userObject.name,
+            specialty: userObject.specialty,
+            hasAvatar: !!userObject.avatar,
+            isVerified: userObject.isVerified
+          });
+
+          setUser(userObject);
+          setLoading(false);
+          console.log('[AuthContext] loadUserProfile - Complete! User state set successfully');
+          return;
+
+        } catch (error: any) {
+          console.error('[AuthContext] loadUserProfile - Exception caught:', {
+            message: error?.message,
+            name: error?.name,
+            stack: error?.stack
+          });
+
+          if (error?.message?.includes('timeout')) {
+            console.error('[AuthContext] Query timed out - possible network or RLS issue');
+          }
+
+          if (i < retries - 1) {
+            console.log(`[AuthContext] loadUserProfile - Retrying after error (attempt ${i + 1}/${retries})...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          } else {
+            console.error('[AuthContext] loadUserProfile - Failed after all retries due to exception');
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      console.error('[AuthContext] loadUserProfile - Exhausted all retry attempts');
+      setLoading(false);
+    } finally {
+      loadingProfileRef.current = false;
+      console.log('[AuthContext] loadUserProfile - Released lock');
+    }
   };
 
   const login = async (email: string, password: string, role: User['role']): Promise<{ success: boolean; error?: AuthError }> => {
