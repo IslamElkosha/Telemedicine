@@ -51,16 +51,17 @@ async function refreshWithingsToken(supabase: any, userId: string, refreshToken:
     const newAccessToken = data.body.access_token;
     const newRefreshToken = data.body.refresh_token;
     const expiresIn = data.body.expires_in;
-    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
     console.log('Token refreshed successfully. Updating database...');
+
+    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
 
     const { error: updateError } = await supabase
       .from('withings_tokens')
       .update({
         access_token: newAccessToken,
         refresh_token: newRefreshToken,
-        expires_at: expiresAt,
+        token_expiry_timestamp: expiryTimestamp,
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId);
@@ -160,12 +161,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('Withings token found. Access token expires at:', tokenData.expires_at);
+    console.log('Withings token found. Token expiry timestamp:', tokenData.token_expiry_timestamp);
 
-    const now = new Date();
-    const expiresAt = new Date(tokenData.expires_at);
-    const isExpired = now >= expiresAt;
-    const willExpireSoon = (expiresAt.getTime() - now.getTime()) < (5 * 60 * 1000);
+    const nowTimestamp = Math.floor(Date.now() / 1000);
+    const expiryTimestamp = tokenData.token_expiry_timestamp || 0;
+    const isExpired = nowTimestamp >= expiryTimestamp;
+    const willExpireSoon = (expiryTimestamp - nowTimestamp) < (5 * 60);
 
     let accessToken = tokenData.access_token;
 
