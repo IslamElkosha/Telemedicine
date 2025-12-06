@@ -73,6 +73,7 @@ const DeviceReadings: React.FC = () => {
       console.log('[DeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       const cacheBuster = Date.now();
       const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading?_t=${cacheBuster}`;
 
@@ -82,6 +83,7 @@ const DeviceReadings: React.FC = () => {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseAnonKey,
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',

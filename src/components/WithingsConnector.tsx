@@ -228,10 +228,15 @@ const WithingsConnector: React.FC = () => {
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseAnonKey,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
         },
       });
 
@@ -243,6 +248,10 @@ const WithingsConnector: React.FC = () => {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
+              'apikey': supabaseAnonKey,
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
             },
           });
 
@@ -250,6 +259,10 @@ const WithingsConnector: React.FC = () => {
             const retryResponse = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
               headers: {
                 'Authorization': `Bearer ${session.access_token}`,
+                'apikey': supabaseAnonKey,
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
               },
             });
             const retryResult = await retryResponse.json();
