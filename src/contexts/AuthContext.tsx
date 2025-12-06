@@ -177,11 +177,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const profile = data.user_profiles as any;
         const userRole = reverseRoleMapping[data.role] || 'patient';
 
+        console.log('[AuthContext] loadUserProfile - Role mapping:', {
+          databaseRole: data.role,
+          mappedRole: userRole,
+          reverseMapping: reverseRoleMapping[data.role],
+          fallback: !reverseRoleMapping[data.role] ? 'using fallback: patient' : 'mapping found'
+        });
+
         const { data: { user: authUser } } = await supabase.auth.getUser();
         const userEmail = data.email || authUser?.email || '';
         const userName = profile?.fullName || authUser?.user_metadata?.full_name || data.email?.split('@')[0] || 'User';
 
-        setUser({
+        const userObject = {
           id: data.id,
           name: userName,
           email: userEmail,
@@ -192,7 +199,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           phone: data.phone,
           createdAt: new Date(data.createdAt),
           isVerified: data.status === 'ACTIVE'
+        };
+
+        console.log('[AuthContext] loadUserProfile - Setting user object:', {
+          id: userObject.id,
+          email: userObject.email,
+          role: userObject.role,
+          name: userObject.name
         });
+
+        setUser(userObject);
         return;
       }
 

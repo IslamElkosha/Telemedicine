@@ -23,10 +23,27 @@ const LandingPage: React.FC = () => {
   };
 
   React.useEffect(() => {
+    console.log('[LandingPage] useEffect triggered:', {
+      isAuthenticated,
+      hasUser: !!user,
+      userRole: user?.role,
+      userEmail: user?.email
+    });
+
     if (isAuthenticated && user) {
       const dashboardRoute = getRoleDashboardRoute(user.role);
-      console.log('[LandingPage] User authenticated, redirecting to:', dashboardRoute);
+      console.log('[LandingPage] User authenticated, redirecting to:', {
+        userRole: user.role,
+        dashboardRoute,
+        timestamp: new Date().toISOString()
+      });
       navigate(dashboardRoute);
+    } else {
+      console.log('[LandingPage] Not redirecting:', {
+        isAuthenticated,
+        hasUser: !!user,
+        reason: !isAuthenticated ? 'not authenticated' : 'no user object'
+      });
     }
   }, [isAuthenticated, user, navigate]);
 

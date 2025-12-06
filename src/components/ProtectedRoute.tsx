@@ -12,7 +12,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   const { user, isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
+  console.log('[ProtectedRoute] Render check:', {
+    path: location.pathname,
+    loading,
+    isAuthenticated,
+    hasUser: !!user,
+    userRole: user?.role,
+    allowedRoles,
+    timestamp: new Date().toISOString()
+  });
+
   if (loading) {
+    console.log('[ProtectedRoute] Showing loading screen');
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -25,14 +36,21 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   }
 
   if (!isAuthenticated || !user) {
+    console.log('[ProtectedRoute] Redirecting to home - not authenticated or no user');
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     const dashboardRoute = getRoleDashboardRoute(user.role);
+    console.log('[ProtectedRoute] Role mismatch, redirecting:', {
+      userRole: user.role,
+      allowedRoles,
+      redirectTo: dashboardRoute
+    });
     return <Navigate to={dashboardRoute} replace />;
   }
 
+  console.log('[ProtectedRoute] Access granted, rendering children');
   return <>{children}</>;
 };
 
