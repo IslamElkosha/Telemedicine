@@ -5,8 +5,8 @@
 **Status:** Connected and Verified
 
 **Environment:** Production
-**Project URL:** https://srbctmwzmbwewqhhulam.supabase.co
-**Project Reference:** srbctmwzmbwewqhhulam
+**Project URL:** https://kwlommrclqhpvthqxcge.supabase.co
+**Project Reference:** kwlommrclqhpvthqxcge
 
 ## Database Statistics
 
@@ -137,10 +137,10 @@ Your application is fully connected to Supabase production. You can:
 
 ## Support Links
 
-- **Supabase Dashboard:** https://app.supabase.com/project/srbctmwzmbwewqhhulam
-- **Edge Functions Logs:** https://app.supabase.com/project/srbctmwzmbwewqhhulam/functions
-- **Database Tables:** https://app.supabase.com/project/srbctmwzmbwewqhhulam/editor
-- **Authentication:** https://app.supabase.com/project/srbctmwzmbwewqhhulam/auth/users
+- **Supabase Dashboard:** https://app.supabase.com/project/kwlommrclqhpvthqxcge
+- **Edge Functions Logs:** https://app.supabase.com/project/kwlommrclqhpvthqxcge/functions
+- **Database Tables:** https://app.supabase.com/project/kwlommrclqhpvthqxcge/editor
+- **Authentication:** https://app.supabase.com/project/kwlommrclqhpvthqxcge/auth/users
 
 ## Recent Fixes
 
