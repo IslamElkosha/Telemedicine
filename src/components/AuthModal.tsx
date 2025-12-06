@@ -14,6 +14,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<AuthError | null>(null);
   const [success, setSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -25,7 +26,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
     specialty: '',
     license: ''
   });
-  const { login, register, loading } = useAuth();
+  const { login, register } = useAuth();
 
   if (!isOpen) return null;
 
@@ -33,6 +34,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
     e.preventDefault();
     setError(null);
     setSuccess(false);
+    setSubmitting(true);
 
     console.log('[AuthModal] Form submission started');
     console.log('[AuthModal] isLogin:', isLogin);
@@ -47,54 +49,58 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
       selectedRole: selectedRole
     });
 
-    if (isLogin) {
-      console.log('[AuthModal] Calling login function with:', {
-        email: formData.email,
-        password: formData.password ? 'present' : 'missing',
-        role: selectedRole
-      });
+    try {
+      if (isLogin) {
+        console.log('[AuthModal] Calling login function with:', {
+          email: formData.email,
+          password: formData.password ? 'present' : 'missing',
+          role: selectedRole
+        });
 
-      const result = await login(formData.email, formData.password, selectedRole as any);
+        const result = await login(formData.email, formData.password, selectedRole as any);
 
-      console.log('[AuthModal] Login result:', {
-        success: result.success,
-        hasError: !!result.error,
-        errorMessage: result.error?.message
-      });
+        console.log('[AuthModal] Login result:', {
+          success: result.success,
+          hasError: !!result.error,
+          errorMessage: result.error?.message
+        });
 
-      if (result.success) {
-        setSuccess(true);
-        console.log('[AuthModal] Login successful, LandingPage will handle redirect');
-        setTimeout(() => {
-          onClose();
-        }, 300);
+        if (result.success) {
+          setSuccess(true);
+          console.log('[AuthModal] Login successful, LandingPage will handle redirect');
+          setTimeout(() => {
+            onClose();
+          }, 300);
+        } else {
+          setError(result.error || { message: 'Login failed' });
+        }
       } else {
-        setError(result.error || { message: 'Login failed' });
+        const registrationData: RegistrationData = {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          confirmPassword: formData.confirmPassword,
+          role: selectedRole as any,
+          specialty: formData.specialty,
+          license: formData.license,
+          phone: formData.phone,
+          dateOfBirth: formData.dateOfBirth,
+          address: formData.address
+        };
+
+        const result = await register(registrationData);
+        if (result.success) {
+          setSuccess(true);
+          console.log('[AuthModal] Registration successful, LandingPage will handle redirect');
+          setTimeout(() => {
+            onClose();
+          }, 300);
+        } else {
+          setError(result.error || { message: 'Registration failed' });
+        }
       }
-    } else {
-      const registrationData: RegistrationData = {
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-        confirmPassword: formData.confirmPassword,
-        role: selectedRole as any,
-        specialty: formData.specialty,
-        license: formData.license,
-        phone: formData.phone,
-        dateOfBirth: formData.dateOfBirth,
-        address: formData.address
-      };
-      
-      const result = await register(registrationData);
-      if (result.success) {
-        setSuccess(true);
-        console.log('[AuthModal] Registration successful, LandingPage will handle redirect');
-        setTimeout(() => {
-          onClose();
-        }, 300);
-      } else {
-        setError(result.error || { message: 'Registration failed' });
-      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -123,7 +129,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
       <div className="bg-white rounded-xl max-w-md w-full p-6 relative max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          disabled={loading}
+          disabled={submitting}
           className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
         >
           <X className="h-6 w-6" />
@@ -177,7 +183,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                   hasFieldError('name') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
                 placeholder="Enter your full name"
-                disabled={loading}
+                disabled={submitting}
               />
               {getFieldError('name') && (
                 <p className="text-red-600 text-sm mt-1">{getFieldError('name')}</p>
@@ -198,7 +204,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                 hasFieldError('email') ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
               placeholder="Enter your email"
-              disabled={loading}
+              disabled={submitting}
             />
             {getFieldError('email') && (
               <p className="text-red-600 text-sm mt-1">{getFieldError('email')}</p>
@@ -219,12 +225,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                   hasFieldError('password') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
                 placeholder={isLogin ? "Enter your password" : "Create a strong password"}
-                disabled={loading}
+                disabled={submitting}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                disabled={loading}
+                disabled={submitting}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
               >
                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -255,12 +261,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                     hasFieldError('confirmPassword') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                   }`}
                   placeholder="Confirm your password"
-                  disabled={loading}
+                  disabled={submitting}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  disabled={loading}
+                  disabled={submitting}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 >
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -288,7 +294,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                 onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="+1 (555) 123-4567"
-                disabled={loading}
+                disabled={submitting}
               />
             </div>
           )}
@@ -305,7 +311,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     hasFieldError('specialty') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                   }`}
-                  disabled={loading}
+                  disabled={submitting}
                   required
                 >
                   <option value="">Select Specialty</option>
@@ -340,7 +346,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                     hasFieldError('license') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                   }`}
                   placeholder="e.g., MD12345"
-                  disabled={loading}
+                  disabled={submitting}
                   maxLength={20}
                 />
                 {getFieldError('license') && (
@@ -368,13 +374,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
 
           <button
             type="submit"
-            disabled={loading || success}
+            disabled={submitting || success}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
           >
-            {loading && <Loader className="h-4 w-4 animate-spin" />}
+            {submitting && <Loader className="h-4 w-4 animate-spin" />}
             <span>
-              {loading 
-                ? (isLogin ? 'Signing In...' : 'Creating Account...') 
+              {submitting
+                ? (isLogin ? 'Signing In...' : 'Creating Account...')
                 : (isLogin ? 'Sign In' : 'Create Account')
               }
             </span>
@@ -400,7 +406,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
                 license: ''
               });
             }}
-            disabled={loading}
+            disabled={submitting}
             className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
           >
             {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}

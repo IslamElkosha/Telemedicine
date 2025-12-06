@@ -203,8 +203,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (email: string, password: string, role: User['role']): Promise<{ success: boolean; error?: AuthError }> => {
-    setLoading(true);
-
     try {
       console.log('[AuthContext] Login attempt started');
       console.log('[AuthContext] Received parameters:', {
@@ -274,9 +272,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await loadUserProfile(authData.user.id);
       return { success: true };
     } catch (error) {
+      console.error('[AuthContext] Login error:', error);
       return { success: false, error: { message: 'An unexpected error occurred. Please try again.' } };
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -286,8 +283,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const register = async (userData: RegistrationData): Promise<{ success: boolean; error?: AuthError }> => {
-    setLoading(true);
-
     try {
       if (!validateName(userData.name)) {
         return { success: false, error: { field: 'name', message: 'Please enter a valid name (letters and spaces only, minimum 2 characters)' } };
@@ -359,15 +354,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await loadUserProfile(authData.user.id);
       return { success: true };
     } catch (error) {
+      console.error('[AuthContext] Registration error:', error);
       return { success: false, error: { message: 'An unexpected error occurred during registration. Please try again.' } };
-    } finally {
-      setLoading(false);
     }
   };
 
   const updateProfile = async (updates: Partial<User>): Promise<{ success: boolean; error?: AuthError }> => {
-    setLoading(true);
-
     try {
       if (!user) {
         return { success: false, error: { message: 'No user logged in' } };
@@ -387,9 +379,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await loadUserProfile(user.id);
       return { success: true };
     } catch (error) {
+      console.error('[AuthContext] Update profile error:', error);
       return { success: false, error: { message: 'Failed to update profile. Please try again.' } };
-    } finally {
-      setLoading(false);
     }
   };
 
