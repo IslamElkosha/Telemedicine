@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Thermometer, Link as LinkIcon, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
+import { Heart, Thermometer, Link as LinkIcon, CheckCircle, XCircle, Clock, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { callEdgeFunction } from '../utils/api';
 
@@ -39,6 +39,8 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
   ]);
   const [loading, setLoading] = useState(true);
   const [hasConnection, setHasConnection] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
     checkDeviceStatus();
@@ -131,6 +133,8 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const handleLinkDevice = async () => {
     try {
+      setLinkError(null);
+      setLinking(true);
       console.log('Initiating Withings device link...');
 
       const result = await callEdgeFunction('force-withings-relink', 'POST');
@@ -140,10 +144,11 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
       }
 
       console.log('Force relink successful. Redirecting to Withings OAuth...');
-      window.location.href = result.data.authUrl;
+      window.location.href = result.authUrl;
     } catch (error: any) {
       console.error('Error linking device:', error);
-      alert(`Failed to link device: ${error.message}`);
+      setLinkError(error.message || 'Failed to link device. Please try again.');
+      setLinking(false);
     }
   };
 
@@ -212,6 +217,22 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
       </div>
 
       <div className="p-6 space-y-4">
+        {linkError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">Failed to link device</p>
+              <p className="text-sm text-red-700 mt-1">{linkError}</p>
+            </div>
+            <button
+              onClick={() => setLinkError(null)}
+              className="text-red-400 hover:text-red-600 ml-3"
+            >
+              <XCircle className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+
         {devices.map((device, index) => (
           <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
@@ -251,10 +272,20 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
                 {!hasConnection && device.connectionStatus === 'Disconnected' && (
                   <button
                     onClick={onLinkDevice || handleLinkDevice}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                    disabled={linking}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <LinkIcon className="h-4 w-4" />
-                    <span>Link Device</span>
+                    {linking ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Linking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="h-4 w-4" />
+                        <span>Link Device</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>
