@@ -69,9 +69,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
         const dashboardRoute = getRoleDashboardRoute(selectedRole);
         console.log('[AuthModal] Login successful, redirecting to:', dashboardRoute);
         setTimeout(() => {
-          onClose();
           navigate(dashboardRoute);
-        }, 1000);
+          onClose();
+        }, 500);
       } else {
         setError(result.error || { message: 'Login failed' });
       }
@@ -95,9 +95,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
         const dashboardRoute = getRoleDashboardRoute(selectedRole);
         console.log('[AuthModal] Registration successful, redirecting to:', dashboardRoute);
         setTimeout(() => {
-          onClose();
           navigate(dashboardRoute);
-        }, 1500);
+          onClose();
+        }, 500);
       } else {
         setError(result.error || { message: 'Registration failed' });
       }
