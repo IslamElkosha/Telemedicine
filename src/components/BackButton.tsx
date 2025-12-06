@@ -9,14 +9,26 @@ interface BackButtonProps {
   fallbackPath?: string;
 }
 
-const BackButton: React.FC<BackButtonProps> = ({ 
-  className = '', 
+const BackButton: React.FC<BackButtonProps> = ({
+  className = '',
   showText = true,
-  fallbackPath 
+  fallbackPath
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+
+  const getRoleDashboardRoute = (role: string) => {
+    const dashboardRoutes: { [key: string]: string } = {
+      'patient': '/patient/devices',
+      'doctor': '/doctor',
+      'technician': '/technician',
+      'admin': '/admin',
+      'hospital': '/hospital',
+      'freelance-tech': '/freelance-tech'
+    };
+    return dashboardRoutes[role] || `/${role}`;
+  };
 
   const handleBack = () => {
     // Check if there's history to go back to
@@ -28,7 +40,9 @@ const BackButton: React.FC<BackButtonProps> = ({
         navigate(fallbackPath);
       } else if (user) {
         // Navigate to role-specific dashboard
-        navigate(`/${user.role}`);
+        const dashboardRoute = getRoleDashboardRoute(user.role);
+        console.log('[BackButton] Navigating to dashboard:', dashboardRoute);
+        navigate(dashboardRoute);
       } else {
         // Navigate to home page for non-authenticated users
         navigate('/');
@@ -38,7 +52,8 @@ const BackButton: React.FC<BackButtonProps> = ({
 
   const isHomePage = () => {
     if (!user) return location.pathname === '/';
-    return location.pathname === `/${user.role}` || location.pathname === `/${user.role}/`;
+    const dashboardRoute = getRoleDashboardRoute(user.role);
+    return location.pathname === dashboardRoute || location.pathname === `${dashboardRoute}/`;
   };
 
   // Don't show back button on home pages

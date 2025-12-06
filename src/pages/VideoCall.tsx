@@ -48,6 +48,18 @@ const VideoCall: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { appointments, updateAppointment } = useAppointments();
+
+  const getRoleDashboardRoute = (role: string) => {
+    const dashboardRoutes: { [key: string]: string } = {
+      'patient': '/patient/devices',
+      'doctor': '/doctor',
+      'technician': '/technician',
+      'admin': '/admin',
+      'hospital': '/hospital',
+      'freelance-tech': '/freelance-tech'
+    };
+    return dashboardRoutes[role] || `/${role}`;
+  };
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [showDevices, setShowDevices] = useState(true);
@@ -506,14 +518,20 @@ const VideoCall: React.FC = () => {
     }
     
     if (appointment) {
-      updateAppointment(appointment.id, { 
+      updateAppointment(appointment.id, {
         status: 'completed',
         notes,
         prescription,
         callDuration: callDuration
       });
     }
-    navigate(`/${user?.role}`);
+    if (user?.role) {
+      const dashboardRoute = getRoleDashboardRoute(user.role);
+      console.log('[VideoCall] Call ended, redirecting to:', dashboardRoute);
+      navigate(dashboardRoute);
+    } else {
+      navigate('/');
+    }
   };
 
   if (!appointment) return null;

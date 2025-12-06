@@ -10,9 +10,23 @@ const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
 
+  const getRoleDashboardRoute = (role: string) => {
+    const dashboardRoutes: { [key: string]: string } = {
+      'patient': '/patient/devices',
+      'doctor': '/doctor',
+      'technician': '/technician',
+      'admin': '/admin',
+      'hospital': '/hospital',
+      'freelance-tech': '/freelance-tech'
+    };
+    return dashboardRoutes[role] || `/${role}`;
+  };
+
   React.useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(`/${user.role}`);
+      const dashboardRoute = getRoleDashboardRoute(user.role);
+      console.log('[LandingPage] User authenticated, redirecting to:', dashboardRoute);
+      navigate(dashboardRoute);
     }
   }, [isAuthenticated, user, navigate]);
 
