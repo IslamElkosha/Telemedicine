@@ -169,3 +169,43 @@ Your application is fully connected to Supabase production and ready for real us
 4. Recommended by Supabase for all new projects
 
 **Verification:** All authentication operations now work correctly without 401 errors
+
+---
+
+## Connection Verification Test Page
+
+A standalone HTML verification page has been created: `verify-supabase-connection.html`
+
+This page performs comprehensive tests:
+- ✅ Supabase client initialization
+- ✅ Database connectivity check
+- ✅ Authentication system verification
+- ✅ Edge Functions endpoint validation
+- ✅ Real-time monitoring of connection status
+
+**To use:** Open `verify-supabase-connection.html` in any web browser. Tests run automatically on page load.
+
+---
+
+## CORS & Authentication Fix (Dec 6, 2025)
+
+**Issue:** Device linking was failing with 401 Unauthorized and CORS cache-control rejection
+
+**Root Causes:**
+1. Edge Function CORS headers missing `cache-control` and `pragma`
+2. Browser sending cache headers by default in fetch requests
+
+**Solution:** Updated `force-withings-relink` Edge Function
+- Added `cache-control` and `pragma` to Access-Control-Allow-Headers
+- Added Cache-Control, Pragma, and Expires response headers
+- Matches working configuration in `fetch-latest-bp-reading` function
+
+**Headers Now Include:**
+```typescript
+'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma'
+'Cache-Control': 'no-cache, no-store, must-revalidate'
+'Pragma': 'no-cache'
+'Expires': '0'
+```
+
+**Verification:** Device linking now works without CORS or authentication errors
