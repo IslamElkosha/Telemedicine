@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Thermometer, Activity, RefreshCw, CheckCircle, XCircle, AlertCircle, Bug } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { edgeFunctions } from '../lib/edgeFunctions';
+import { callEdgeFunction } from '../utils/api';
 
 interface BPReading {
   systolic?: number;
@@ -131,9 +131,9 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       setSubscribing(true);
 
       console.log('Subscribing to Withings notifications...');
-      const result = await edgeFunctions.subscribeWithingsNotify();
+      const result = await callEdgeFunction('subscribe-withings-notify', 'POST');
 
-      if (result.success && (result.data?.success || result.data?.alreadySubscribed)) {
+      if (result?.success || result?.alreadySubscribed) {
         setSubscriptionStatus('subscribed');
         alert('Real-time notifications enabled! New readings will appear automatically.');
       } else {
@@ -159,9 +159,9 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       setDebugLoading(true);
       setDebugData(null);
 
-      const result = await edgeFunctions.debugWithingsDataPull();
+      const result = await callEdgeFunction('debug-withings-data-pull', 'POST');
 
-      if (result.success) {
+      if (result) {
         setDebugData(result.data);
 
         const newWindow = window.open('', '_blank');
@@ -187,9 +187,9 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
     try {
       setSyncing(true);
 
-      const result = await edgeFunctions.withingsFetchMeasurements();
+      const result = await callEdgeFunction('withings-fetch-measurements', 'POST');
 
-      if (result.success && result.data?.success) {
+      if (result?.success) {
         alert('Data synced successfully! Refreshing...');
         await loadReadings();
       } else {
@@ -243,9 +243,9 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       console.log('[WithingsDeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
       console.log('[WithingsDeviceReadings] User ID:', session.user.id);
 
-      const result = await edgeFunctions.fetchLatestBPReading();
+      const result = await callEdgeFunction('fetch-latest-bp-reading', 'GET');
 
-      if (!result.success) {
+      if (!result) {
         console.error('[WithingsDeviceReadings] Error:', result.error);
         setBpStatus('Disconnected');
         setErrors(prev => ({ ...prev, bp: result.error || 'Failed to fetch blood pressure data' }));

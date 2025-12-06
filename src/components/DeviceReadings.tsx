@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Activity, Thermometer, Bluetooth, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { edgeFunctions } from '../lib/edgeFunctions';
+import { callEdgeFunction } from '../utils/api';
 
 interface DeviceReading {
   deviceType: string;
@@ -73,23 +73,7 @@ const DeviceReadings: React.FC = () => {
 
       console.log('[DeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
 
-      const result = await edgeFunctions.fetchLatestBPReading();
-
-      if (!result.success) {
-        console.error('[DeviceReadings] Error:', result.error);
-        const errorData = result.details;
-
-        if (errorData?.needsReconnect || result.error?.includes('No Withings connection')) {
-          setError('Please connect your Withings device first');
-          setReadings(getEmptyReadings());
-          setLoading(false);
-          return;
-        }
-
-        throw new Error(result.error || 'Failed to fetch BP data');
-      }
-
-      const bpData: BPData = result.data;
+      const bpData: BPData = await callEdgeFunction('fetch-latest-bp-reading', 'GET');
       console.log('=== [DeviceReadings] RAW RESPONSE FROM BACKEND ===');
       console.log('Full response object:', JSON.stringify(bpData, null, 2));
       console.log('Systolic (raw):', bpData.systolic, 'Type:', typeof bpData.systolic);
@@ -98,8 +82,9 @@ const DeviceReadings: React.FC = () => {
       console.log('Timestamp:', bpData.timestamp, '→', new Date(bpData.timestamp * 1000).toISOString());
       console.log('Success flag:', bpData.success);
 
-      if (!bpData.success || !bpData.systolic || !bpData.diastolic) {
-        console.log('[DeviceReadings] No BP data available (success:', bpData.success, ', systolic:', bpData.systolic, ', diastolic:', bpData.diastolic, ')');
+      if (!bpData || !bpData.systolic || !bpData.diastolic) {
+        console.log('[DeviceReadings] No BP data available (systolic:', bpData?.systolic, ', diastolic:', bpData?.diastolic, ')');
+        setError('Please connect your Withings device first');
         setReadings(getEmptyReadings());
         setLoading(false);
         return;

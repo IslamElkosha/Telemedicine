@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Thermometer, Link as LinkIcon, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { edgeFunctions } from '../lib/edgeFunctions';
+import { callEdgeFunction } from '../utils/api';
 
 interface DeviceStatus {
   name: string;
@@ -133,9 +133,9 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
     try {
       console.log('Initiating Withings device link...');
 
-      const result = await edgeFunctions.forceWithingsRelink();
+      const result = await callEdgeFunction('force-withings-relink', 'POST');
 
-      if (!result.success || !result.data?.authUrl) {
+      if (!result || !result.authUrl) {
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
@@ -151,9 +151,9 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
     try {
       console.log('Subscribing to Withings notifications...');
 
-      const result = await edgeFunctions.subscribeWithingsNotify();
+      const result = await callEdgeFunction('subscribe-withings-notify', 'POST');
 
-      if (result.success || result.data?.alreadySubscribed) {
+      if (result?.success || result?.alreadySubscribed) {
         console.log('Webhook notifications enabled:', result.data?.message || 'Success');
       } else {
         console.error('Failed to subscribe to notifications:', result.error);

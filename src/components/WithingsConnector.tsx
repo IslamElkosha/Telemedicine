@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Heart, Thermometer, Droplet, Link as LinkIcon, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { edgeFunctions } from '../lib/edgeFunctions';
+import { callEdgeFunction } from '../utils/api';
 
 interface WithingsStatus {
   connected: boolean;
@@ -128,15 +128,11 @@ const WithingsConnector: React.FC = () => {
       setError(null);
       console.log('[WithingsConnector] Starting connection process...');
 
-      const result = await edgeFunctions.forceWithingsRelink();
+      const result = await callEdgeFunction('force-withings-relink', 'POST');
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to generate authorization URL');
-      }
-
-      if (result.data?.authUrl) {
-        console.log('[WithingsConnector] Success! Redirecting to:', result.data.authUrl);
-        window.location.href = result.data.authUrl;
+      if (result?.authUrl) {
+        console.log('[WithingsConnector] Success! Redirecting to:', result.authUrl);
+        window.location.href = result.authUrl;
       } else {
         throw new Error('No authorization URL returned from server');
       }
@@ -151,24 +147,7 @@ const WithingsConnector: React.FC = () => {
       setSyncing(true);
       setError(null);
 
-      const result = await edgeFunctions.withingsFetchMeasurements();
-
-      if (!result.success) {
-        if (result.data?.needsRefresh) {
-          const refreshResult = await edgeFunctions.withingsRefreshToken();
-
-          if (refreshResult.success) {
-            const retryResult = await edgeFunctions.withingsFetchMeasurements();
-
-            if (retryResult.success) {
-              await checkConnection();
-              return;
-            }
-          }
-        }
-        throw new Error(result.error || 'Failed to sync measurements');
-      }
-
+      await callEdgeFunction('withings-fetch-measurements', 'POST');
       await checkConnection();
     } catch (err: any) {
       console.error('Error syncing measurements:', err);
