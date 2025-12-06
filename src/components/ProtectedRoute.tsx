@@ -16,8 +16,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <Loader className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading...</p>
+          <Loader className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-900 font-semibold text-lg">Loading Patient Data...</p>
+          <p className="text-gray-500 text-sm mt-2">Please wait while we verify your session</p>
         </div>
       </div>
     );
