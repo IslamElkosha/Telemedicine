@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Activity, Thermometer, Bluetooth, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { edgeFunctions } from '../lib/edgeFunctions';
 
 interface DeviceReading {
   deviceType: string;
@@ -72,41 +73,23 @@ const DeviceReadings: React.FC = () => {
 
       console.log('[DeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const cacheBuster = Date.now();
-      const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading?_t=${cacheBuster}`;
+      const result = await edgeFunctions.fetchLatestBPReading();
 
-      console.log('[DeviceReadings] Cache-busting URL:', apiUrl);
+      if (!result.success) {
+        console.error('[DeviceReadings] Error:', result.error);
+        const errorData = result.details;
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
-
-      console.log('[DeviceReadings] Edge Function response status:', response.status);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[DeviceReadings] Edge Function error:', errorData);
-
-        if (errorData.needsReconnect || errorData.error?.includes('No Withings connection')) {
+        if (errorData?.needsReconnect || result.error?.includes('No Withings connection')) {
           setError('Please connect your Withings device first');
           setReadings(getEmptyReadings());
           setLoading(false);
           return;
         }
 
-        throw new Error(errorData.error || 'Failed to fetch BP data');
+        throw new Error(result.error || 'Failed to fetch BP data');
       }
 
-      const bpData: BPData = await response.json();
+      const bpData: BPData = result.data;
       console.log('=== [DeviceReadings] RAW RESPONSE FROM BACKEND ===');
       console.log('Full response object:', JSON.stringify(bpData, null, 2));
       console.log('Systolic (raw):', bpData.systolic, 'Type:', typeof bpData.systolic);

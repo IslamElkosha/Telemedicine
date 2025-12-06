@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Heart, Thermometer, Droplet, Link as LinkIcon, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { edgeFunctions } from '../lib/edgeFunctions';
 
 interface WithingsStatus {
   connected: boolean;
@@ -127,89 +128,18 @@ const WithingsConnector: React.FC = () => {
       setError(null);
       console.log('[WithingsConnector] Starting connection process...');
 
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const result = await edgeFunctions.forceWithingsRelink();
 
-      console.log('[WithingsConnector] Session check:', {
-        hasSession: !!session,
-        hasAccessToken: !!session?.access_token,
-        userId: session?.user?.id,
-        error: sessionError
-      });
-
-      if (sessionError) {
-        console.error('[WithingsConnector] Session error:', sessionError);
-        setError(`Session error: ${sessionError.message}`);
-        return;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
-      if (!session || !session.access_token) {
-        console.error('[WithingsConnector] No active session or access token found');
-        setError('Please log in to connect Withings devices. If already logged in, try refreshing the page.');
-        return;
+      if (result.data?.authUrl) {
+        console.log('[WithingsConnector] Success! Redirecting to:', result.data.authUrl);
+        window.location.href = result.data.authUrl;
+      } else {
+        throw new Error('No authorization URL returned from server');
       }
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      if (!supabaseUrl || !supabaseAnonKey) {
-        console.error('[WithingsConnector] Missing environment variables');
-        setError('Configuration error: Missing Supabase credentials');
-        return;
-      }
-
-      console.log('[WithingsConnector] Environment check:', {
-        hasUrl: !!supabaseUrl,
-        hasAnonKey: !!supabaseAnonKey,
-        url: supabaseUrl
-      });
-
-      const headers = {
-        'Authorization': `Bearer ${session.access_token}`,
-        'apikey': supabaseAnonKey,
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-      };
-
-      console.log('[WithingsConnector] Request headers prepared:', {
-        hasAuth: !!headers.Authorization,
-        hasApikey: !!headers.apikey,
-        tokenLength: session.access_token?.length,
-        tokenPreview: session.access_token?.substring(0, 30)
-      });
-
-      console.log('[WithingsConnector] Calling force-withings-relink...');
-      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
-        method: 'POST',
-        headers,
-      });
-
-      console.log('[WithingsConnector] Response status:', response.status);
-
-      let result;
-      try {
-        result = await response.json();
-        console.log('[WithingsConnector] Response body:', result);
-      } catch (parseError) {
-        console.error('[WithingsConnector] Failed to parse response:', parseError);
-        const text = await response.text();
-        console.error('[WithingsConnector] Raw response:', text);
-        throw new Error(`Server returned invalid JSON: ${text}`);
-      }
-
-      if (!response.ok || !result.success) {
-        const errorMsg = result.details || result.error || 'Failed to generate authorization URL';
-        console.error('[WithingsConnector] Request failed:', {
-          status: response.status,
-          error: errorMsg,
-          debugInfo: result.debugInfo
-        });
-        throw new Error(errorMsg);
-      }
-
-      console.log('[WithingsConnector] Success! Redirecting to:', result.authUrl);
-      console.log('[WithingsConnector] Tokens deleted:', result.tokensDeleted);
-      window.location.href = result.authUrl;
     } catch (err: any) {
       console.error('[WithingsConnector] Error in handleConnect:', err);
       setError(err.message || 'An unexpected error occurred');
@@ -221,53 +151,16 @@ const WithingsConnector: React.FC = () => {
       setSyncing(true);
       setError(null);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Please log in to sync measurements');
-        return;
-      }
+      const result = await edgeFunctions.withingsFetchMeasurements();
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!result.success) {
+        if (result.data?.needsRefresh) {
+          const refreshResult = await edgeFunctions.withingsRefreshToken();
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
+          if (refreshResult.success) {
+            const retryResult = await edgeFunctions.withingsFetchMeasurements();
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        if (result.needsRefresh) {
-          const refreshResponse = await fetch(`${supabaseUrl}/functions/v1/withings-refresh-token`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'apikey': supabaseAnonKey,
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-            },
-          });
-
-          if (refreshResponse.ok) {
-            const retryResponse = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
-              headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'apikey': supabaseAnonKey,
-                'Content-Type': 'application/json',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-              },
-            });
-            const retryResult = await retryResponse.json();
-
-            if (retryResponse.ok) {
+            if (retryResult.success) {
               await checkConnection();
               return;
             }

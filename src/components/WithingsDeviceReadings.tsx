@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Thermometer, Activity, RefreshCw, CheckCircle, XCircle, AlertCircle, Bug } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { edgeFunctions } from '../lib/edgeFunctions';
 
 interface BPReading {
   systolic?: number;
@@ -128,35 +129,16 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
   const subscribeToNotifications = async () => {
     try {
       setSubscribing(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        alert('Please log in to enable notifications');
-        return;
-      }
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       console.log('Subscribing to Withings notifications...');
-      const response = await fetch(`${supabaseUrl}/functions/v1/subscribe-withings-notify`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
+      const result = await edgeFunctions.subscribeWithingsNotify();
 
-      const result = await response.json();
-
-      if (result.success || result.alreadySubscribed) {
+      if (result.success && (result.data?.success || result.data?.alreadySubscribed)) {
         setSubscriptionStatus('subscribed');
         alert('Real-time notifications enabled! New readings will appear automatically.');
       } else {
         setSubscriptionStatus('error');
-        alert(`Failed to enable notifications: ${result.error}`);
+        alert(`Failed to enable notifications: ${result.error || 'Unknown error'}`);
       }
     } catch (error: any) {
       console.error('Error subscribing to notifications:', error);
@@ -177,35 +159,21 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
       setDebugLoading(true);
       setDebugData(null);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        alert('Not authenticated');
-        return;
-      }
+      const result = await edgeFunctions.debugWithingsDataPull();
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const response = await fetch(`${supabaseUrl}/functions/v1/debug-withings-data-pull`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
+      if (result.success) {
+        setDebugData(result.data);
 
-      const result = await response.json();
-      setDebugData(result);
-
-      const newWindow = window.open('', '_blank');
-      if (newWindow) {
-        newWindow.document.write('<html><head><title>Withings API Debug</title></head><body>');
-        newWindow.document.write('<pre style="font-family: monospace; padding: 20px; background: #f5f5f5;">');
-        newWindow.document.write(JSON.stringify(result, null, 2));
-        newWindow.document.write('</pre></body></html>');
-        newWindow.document.close();
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+          newWindow.document.write('<html><head><title>Withings API Debug</title></head><body>');
+          newWindow.document.write('<pre style="font-family: monospace; padding: 20px; background: #f5f5f5;">');
+          newWindow.document.write(JSON.stringify(result.data, null, 2));
+          newWindow.document.write('</pre></body></html>');
+          newWindow.document.close();
+        }
+      } else {
+        alert(`Debug error: ${result.error}`);
       }
     } catch (error: any) {
       console.error('Debug error:', error);
@@ -219,28 +187,9 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
     try {
       setSyncing(true);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        alert('Not authenticated');
-        return;
-      }
+      const result = await edgeFunctions.withingsFetchMeasurements();
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': supabaseAnonKey,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
+      if (result.success && result.data?.success) {
         alert('Data synced successfully! Refreshing...');
         await loadReadings();
       } else {
@@ -293,76 +242,17 @@ const WithingsDeviceReadings: React.FC<WithingsDeviceReadingsProps> = ({ userId,
 
       console.log('[WithingsDeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
       console.log('[WithingsDeviceReadings] User ID:', session.user.id);
-      console.log('[WithingsDeviceReadings] Session token (first 30 chars):', session.access_token.substring(0, 30) + '...');
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const cacheBuster = Date.now();
-      const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading?_t=${cacheBuster}`;
+      const result = await edgeFunctions.fetchLatestBPReading();
 
-      console.log('[WithingsDeviceReadings] Request URL:', apiUrl);
-      console.log('[WithingsDeviceReadings] Authorization header will be:', `Bearer ${session.access_token.substring(0, 30)}...`);
-
-      let response;
-      try {
-        response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'apikey': supabaseAnonKey,
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-          },
-        });
-
-        console.log('[WithingsDeviceReadings] Response status:', response.status);
-        console.log('[WithingsDeviceReadings] Response headers:', {
-          'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
-          'content-type': response.headers.get('content-type'),
-        });
-      } catch (fetchError: any) {
-        console.error('=== [WithingsDeviceReadings] FETCH ERROR ===');
-        console.error('Error name:', fetchError.name);
-        console.error('Error message:', fetchError.message);
-        console.error('Error type:', fetchError instanceof TypeError ? 'TypeError (Network/CORS)' : 'Other');
-        console.error('Full error:', fetchError);
-
+      if (!result.success) {
+        console.error('[WithingsDeviceReadings] Error:', result.error);
         setBpStatus('Disconnected');
-        setErrors(prev => ({
-          ...prev,
-          bp: `Network error: ${fetchError.message}. This could be a CORS issue, network timeout, or connection problem. Check browser console for details.`
-        }));
+        setErrors(prev => ({ ...prev, bp: result.error || 'Failed to fetch blood pressure data' }));
         return;
       }
 
-      if (!response.ok) {
-        console.error('=== [WithingsDeviceReadings] HTTP ERROR ===');
-        console.error('Status code:', response.status);
-        console.error('Status text:', response.statusText);
-
-        let errorData;
-        try {
-          errorData = await response.json();
-          console.error('Error response body:', JSON.stringify(errorData, null, 2));
-        } catch (parseError) {
-          console.error('Could not parse error response as JSON');
-          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
-        }
-
-        setBpStatus('Disconnected');
-
-        let errorMessage = errorData.error || `HTTP ${response.status} error`;
-        if (errorData.details) {
-          console.error('Additional error details:', errorData.details);
-          errorMessage += ` - ${JSON.stringify(errorData.details)}`;
-        }
-
-        setErrors(prev => ({ ...prev, bp: errorMessage }));
-        return;
-      }
-
-      const bpData = await response.json();
+      const bpData = result.data;
       console.log('=== [WithingsDeviceReadings] RAW BACKEND RESPONSE ===');
       console.log('Full response:', JSON.stringify(bpData, null, 2));
       console.log('Systolic:', bpData.systolic);
