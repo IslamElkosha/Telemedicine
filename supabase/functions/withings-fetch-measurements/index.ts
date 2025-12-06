@@ -103,17 +103,36 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    console.log('=== WITHINGS FETCH MEASUREMENTS START ===');
+
     const authHeader = req.headers.get('Authorization');
+    console.log('[Edge Function] Authorization header present:', !!authHeader);
+
     if (!authHeader) {
+      console.error('[Edge Function] Missing Authorization header');
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log('[Edge Function] Auth header value (first 20 chars):', authHeader.slice(0, 20) + '...');
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+
+    console.log('[Edge Function] Creating user context client (forwarding auth header)...');
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader
+        }
+      }
+    });
+
+    console.log('[Edge Function] Creating service role client (for writes that bypass RLS)...');
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -121,23 +140,29 @@ Deno.serve(async (req: Request) => {
       }
     });
 
+    console.log('[Edge Function] Verifying user identity...');
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
+      console.error('[Edge Function] Authentication failed:', authError?.message);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const { data: tokenData, error: tokenError } = await supabase
+    console.log('[Edge Function] Authenticated user:', user.id);
+
+    console.log('[Edge Function] Reading withings_tokens with user context (RLS enforced)...');
+    const { data: tokenData, error: tokenError } = await supabaseUser
       .from('withings_tokens')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (tokenError || !tokenData) {
+      console.error('[Edge Function] No Withings token found:', tokenError?.message);
       return new Response(
         JSON.stringify({ error: 'No Withings connection found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -149,9 +174,9 @@ Deno.serve(async (req: Request) => {
     const bufferTime = 300;
 
     if (tokenData.token_expiry_timestamp <= (now + bufferTime)) {
-      console.log('Token expired or expiring soon. Attempting to refresh...');
+      console.log('[Edge Function] Token expired or expiring soon. Attempting to refresh...');
 
-      const newAccessToken = await refreshAccessToken(supabase, user.id, tokenData.refresh_token);
+      const newAccessToken = await refreshAccessToken(supabaseAdmin, user.id, tokenData.refresh_token);
 
       if (!newAccessToken) {
         console.error('Failed to refresh token');

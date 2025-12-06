@@ -19,16 +19,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     console.log('=== FORCE WITHINGS RELINK INITIATED ===');
-    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
 
     const authHeader = req.headers.get('Authorization');
-    const apikeyHeader = req.headers.get('apikey');
-
-    console.log('Authorization header present:', !!authHeader);
-    console.log('Apikey header present:', !!apikeyHeader);
+    console.log('[Edge Function] Authorization header present:', !!authHeader);
 
     if (!authHeader) {
-      console.error('ERROR: Missing Authorization header');
+      console.error('[Edge Function] Missing Authorization header');
       return new Response(
         JSON.stringify({
           error: 'Missing authorization header',
@@ -38,16 +34,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('[Edge Function] Auth header value (first 20 chars):', authHeader.slice(0, 20) + '...');
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    console.log('Environment check:');
-    console.log('- SUPABASE_URL:', supabaseUrl);
-    console.log('- SERVICE_ROLE_KEY present:', !!supabaseServiceKey);
-    console.log('- ANON_KEY present:', !!supabaseAnonKey);
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    console.log('[Edge Function] Creating service role client (for delete operation)...');
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -55,47 +48,37 @@ Deno.serve(async (req: Request) => {
       }
     });
 
+    console.log('[Edge Function] Verifying user identity...');
     const token = authHeader.replace('Bearer ', '');
-    console.log('Extracted token (first 50 chars):', token.substring(0, 50));
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
-      console.error('Authentication failed:', {
-        error: authError,
-        message: authError?.message,
-        status: authError?.status
-      });
+      console.error('[Edge Function] Authentication failed:', authError?.message);
       return new Response(
         JSON.stringify({
           error: 'Unauthorized',
-          details: authError?.message || 'Invalid or expired token',
-          debugInfo: {
-            tokenProvided: !!token,
-            tokenLength: token?.length,
-            authErrorMessage: authError?.message
-          }
+          details: authError?.message || 'Invalid or expired token'
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('User authenticated:', user.id);
+    console.log('[Edge Function] Authenticated user:', user.id);
 
-    console.log('Step 1: Deleting expired/invalid tokens from database');
-    const { error: deleteError, data: deletedData } = await supabase
+    console.log('[Edge Function] Step 1: Deleting expired/invalid tokens from database...');
+    const { error: deleteError, data: deletedData } = await supabaseAdmin
       .from('withings_tokens')
       .delete()
       .eq('user_id', user.id)
       .select();
 
     if (deleteError) {
-      console.error('Error deleting tokens:', deleteError);
+      console.error('[Edge Function] Error deleting tokens:', deleteError.message);
     } else {
-      console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
+      console.log('[Edge Function] Tokens deleted successfully:', deletedData?.length || 0, 'records');
     }
 
-    console.log('Step 2: Generating fresh OAuth authorization URL');
+    console.log('[Edge Function] Step 2: Generating fresh OAuth authorization URL...');
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
     const scope = 'user.metrics,user.info';
     const state = user.id;
