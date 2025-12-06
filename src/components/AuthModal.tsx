@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { useAuth, RegistrationData, AuthError } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -27,7 +26,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
     license: ''
   });
   const { login, register, loading } = useAuth();
-  const navigate = useNavigate();
 
   if (!isOpen) return null;
 
@@ -66,12 +64,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
 
       if (result.success) {
         setSuccess(true);
-        const dashboardRoute = getRoleDashboardRoute(selectedRole);
-        console.log('[AuthModal] Login successful, redirecting to:', dashboardRoute);
+        console.log('[AuthModal] Login successful, LandingPage will handle redirect');
         setTimeout(() => {
-          navigate(dashboardRoute);
           onClose();
-        }, 500);
+        }, 300);
       } else {
         setError(result.error || { message: 'Login failed' });
       }
@@ -92,12 +88,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
       const result = await register(registrationData);
       if (result.success) {
         setSuccess(true);
-        const dashboardRoute = getRoleDashboardRoute(selectedRole);
-        console.log('[AuthModal] Registration successful, redirecting to:', dashboardRoute);
+        console.log('[AuthModal] Registration successful, LandingPage will handle redirect');
         setTimeout(() => {
-          navigate(dashboardRoute);
           onClose();
-        }, 500);
+        }, 300);
       } else {
         setError(result.error || { message: 'Registration failed' });
       }
@@ -115,19 +109,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
     };
     return roleMap[role] || role;
   };
-
-  const getRoleDashboardRoute = (role: string) => {
-    const dashboardRoutes: { [key: string]: string } = {
-      'patient': '/patient',
-      'doctor': '/doctor',
-      'technician': '/technician',
-      'admin': '/admin',
-      'hospital': '/hospital',
-      'freelance-tech': '/freelance-tech'
-    };
-    return dashboardRoutes[role] || `/${role}`;
-  };
-
 
   const getFieldError = (field: string) => {
     return error?.field === field ? error.message : null;
