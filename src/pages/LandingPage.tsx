@@ -12,7 +12,7 @@ const LandingPage: React.FC = () => {
 
   const getRoleDashboardRoute = (role: string) => {
     const dashboardRoutes: { [key: string]: string } = {
-      'patient': '/patient/devices',
+      'patient': '/patient',
       'doctor': '/doctor',
       'technician': '/technician',
       'admin': '/admin',

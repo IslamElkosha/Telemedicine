@@ -118,7 +118,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
 
   const getRoleDashboardRoute = (role: string) => {
     const dashboardRoutes: { [key: string]: string } = {
-      'patient': '/patient/devices',
+      'patient': '/patient',
       'doctor': '/doctor',
       'technician': '/technician',
       'admin': '/admin',
