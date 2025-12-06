@@ -125,34 +125,86 @@ const WithingsConnector: React.FC = () => {
   const handleConnect = async () => {
     try {
       setError(null);
-      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[WithingsConnector] Starting connection process...');
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      console.log('[WithingsConnector] Session check:', {
+        hasSession: !!session,
+        hasAccessToken: !!session?.access_token,
+        userId: session?.user?.id,
+        error: sessionError
+      });
+
+      if (sessionError) {
+        console.error('[WithingsConnector] Session error:', sessionError);
+        setError(`Session error: ${sessionError.message}`);
+        return;
+      }
+
       if (!session) {
+        console.error('[WithingsConnector] No active session found');
         setError('Please log in to connect Withings devices');
         return;
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      console.log('Initiating force relink to clear any expired tokens...');
-      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
+      console.log('[WithingsConnector] Environment check:', {
+        hasUrl: !!supabaseUrl,
+        hasAnonKey: !!supabaseAnonKey,
+        url: supabaseUrl
       });
 
-      const result = await response.json();
+      const headers = {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': supabaseAnonKey,
+        'Content-Type': 'application/json',
+      };
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to generate authorization URL');
+      console.log('[WithingsConnector] Request headers prepared:', {
+        hasAuth: !!headers.Authorization,
+        hasApikey: !!headers.apikey,
+        tokenLength: session.access_token?.length,
+        tokenPreview: session.access_token?.substring(0, 30)
+      });
+
+      console.log('[WithingsConnector] Calling force-withings-relink...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
+        method: 'POST',
+        headers,
+      });
+
+      console.log('[WithingsConnector] Response status:', response.status);
+
+      let result;
+      try {
+        result = await response.json();
+        console.log('[WithingsConnector] Response body:', result);
+      } catch (parseError) {
+        console.error('[WithingsConnector] Failed to parse response:', parseError);
+        const text = await response.text();
+        console.error('[WithingsConnector] Raw response:', text);
+        throw new Error(`Server returned invalid JSON: ${text}`);
       }
 
-      console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
+      if (!response.ok || !result.success) {
+        const errorMsg = result.details || result.error || 'Failed to generate authorization URL';
+        console.error('[WithingsConnector] Request failed:', {
+          status: response.status,
+          error: errorMsg,
+          debugInfo: result.debugInfo
+        });
+        throw new Error(errorMsg);
+      }
+
+      console.log('[WithingsConnector] Success! Redirecting to:', result.authUrl);
+      console.log('[WithingsConnector] Tokens deleted:', result.tokensDeleted);
       window.location.href = result.authUrl;
     } catch (err: any) {
-      console.error('Error initiating OAuth:', err);
-      setError(err.message);
+      console.error('[WithingsConnector] Error in handleConnect:', err);
+      setError(err.message || 'An unexpected error occurred');
     }
   };
 

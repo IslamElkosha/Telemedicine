@@ -15,16 +15,35 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    console.log('=== START WITHINGS AUTH INITIATED ===');
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+
     const authHeader = req.headers.get('Authorization');
+    const apikeyHeader = req.headers.get('apikey');
+
+    console.log('Authorization header present:', !!authHeader);
+    console.log('Apikey header present:', !!apikeyHeader);
+
     if (!authHeader) {
+      console.error('ERROR: Missing Authorization header');
       return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
+        JSON.stringify({
+          error: 'Missing authorization header',
+          details: 'Authorization header with Bearer token is required'
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    console.log('Environment check:');
+    console.log('- SUPABASE_URL:', supabaseUrl);
+    console.log('- SERVICE_ROLE_KEY present:', !!supabaseServiceKey);
+    console.log('- ANON_KEY present:', !!supabaseAnonKey);
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
@@ -34,14 +53,31 @@ Deno.serve(async (req: Request) => {
     });
 
     const token = authHeader.replace('Bearer ', '');
+    console.log('Extracted token (first 50 chars):', token.substring(0, 50));
+
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      console.error('Authentication failed:', {
+        error: authError,
+        message: authError?.message,
+        status: authError?.status
+      });
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({
+          error: 'Unauthorized',
+          details: authError?.message || 'Invalid or expired token',
+          debugInfo: {
+            tokenProvided: !!token,
+            tokenLength: token?.length,
+            authErrorMessage: authError?.message
+          }
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('User authenticated:', user.id);
 
     const url = new URL(req.url);
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
