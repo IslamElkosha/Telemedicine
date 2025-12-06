@@ -167,74 +167,126 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log(`[AuthContext] loadUserProfile - Attempt ${i + 1}/${retries}`);
       const queryStart = Date.now();
 
-      const { data, error } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
-        .select(`
-          *,
-          user_profiles(*),
-          doctors(specialty, licenseNo),
-          patients(*)
-        `)
+        .select('*')
         .eq('id', userId)
         .maybeSingle();
 
       const queryTime = Date.now() - queryStart;
-      console.log(`[AuthContext] loadUserProfile - Query completed in ${queryTime}ms`, {
-        hasData: !!data,
-        hasError: !!error,
-        errorMessage: error?.message
+      console.log(`[AuthContext] loadUserProfile - User query completed in ${queryTime}ms`, {
+        hasData: !!userData,
+        hasError: !!userError,
+        errorMessage: userError?.message
       });
 
-      if (data && !error) {
-        const profile = data.user_profiles as any;
-        const userRole = reverseRoleMapping[data.role] || 'patient';
-
-        console.log('[AuthContext] loadUserProfile - Role mapping:', {
-          databaseRole: data.role,
-          mappedRole: userRole,
-          reverseMapping: reverseRoleMapping[data.role],
-          fallback: !reverseRoleMapping[data.role] ? 'using fallback: patient' : 'mapping found'
-        });
-
-        console.log('[AuthContext] loadUserProfile - Getting auth user...');
-        const authUserStart = Date.now();
-
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-
-        const authUserTime = Date.now() - authUserStart;
-        console.log(`[AuthContext] loadUserProfile - Auth user fetched in ${authUserTime}ms`);
-
-        const userEmail = data.email || authUser?.email || '';
-        const userName = profile?.fullName || authUser?.user_metadata?.full_name || data.email?.split('@')[0] || 'User';
-
-        const userObject = {
-          id: data.id,
-          name: userName,
-          email: userEmail,
-          role: userRole,
-          avatar: profile?.avatarUrl,
-          specialty: data.doctors?.specialty,
-          license: data.doctors?.licenseNo,
-          phone: data.phone,
-          createdAt: new Date(data.createdAt),
-          isVerified: data.status === 'ACTIVE'
-        };
-
-        console.log('[AuthContext] loadUserProfile - Setting user object:', {
-          id: userObject.id,
-          email: userObject.email,
-          role: userObject.role,
-          name: userObject.name
-        });
-
-        setUser(userObject);
-        return;
+      if (userError || !userData) {
+        if (i < retries - 1) {
+          console.log('[AuthContext] loadUserProfile - User query failed, retrying after 500ms delay...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
+        } else {
+          console.error('[AuthContext] loadUserProfile - Failed to fetch user data after all retries');
+          return;
+        }
       }
 
-      if (i < retries - 1) {
-        console.log('[AuthContext] loadUserProfile - Retrying after 500ms delay...');
-        await new Promise(resolve => setTimeout(resolve, 500));
+      const profileQueryStart = Date.now();
+      const { data: profileData } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('userId', userId)
+        .maybeSingle();
+
+      const profileQueryTime = Date.now() - profileQueryStart;
+      console.log(`[AuthContext] loadUserProfile - Profile query completed in ${profileQueryTime}ms`, {
+        hasProfile: !!profileData
+      });
+
+      let roleSpecificData: any = {};
+      const userRole = reverseRoleMapping[userData.role] || 'patient';
+
+      console.log('[AuthContext] loadUserProfile - Role mapping:', {
+        databaseRole: userData.role,
+        mappedRole: userRole
+      });
+
+      if (userRole === 'doctor') {
+        const doctorQueryStart = Date.now();
+        const { data: doctorData } = await supabase
+          .from('doctors')
+          .select('specialty, licenseNo')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const doctorQueryTime = Date.now() - doctorQueryStart;
+        console.log(`[AuthContext] loadUserProfile - Doctor query completed in ${doctorQueryTime}ms`, {
+          hasData: !!doctorData,
+          specialty: doctorData?.specialty
+        });
+
+        if (doctorData) {
+          roleSpecificData = {
+            specialty: doctorData.specialty,
+            license: doctorData.licenseNo
+          };
+        }
+      } else if (userRole === 'patient') {
+        const patientQueryStart = Date.now();
+        const { data: patientData } = await supabase
+          .from('patients')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const patientQueryTime = Date.now() - patientQueryStart;
+        console.log(`[AuthContext] loadUserProfile - Patient query completed in ${patientQueryTime}ms`, {
+          hasData: !!patientData
+        });
+
+        if (patientData) {
+          roleSpecificData = {
+            bloodType: patientData.bloodType,
+            allergies: patientData.allergies,
+            heightCm: patientData.heightCm,
+            weightKg: patientData.weightKg
+          };
+        }
       }
+
+      console.log('[AuthContext] loadUserProfile - Getting auth user...');
+      const authUserStart = Date.now();
+
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+
+      const authUserTime = Date.now() - authUserStart;
+      console.log(`[AuthContext] loadUserProfile - Auth user fetched in ${authUserTime}ms`);
+
+      const userEmail = userData.email || authUser?.email || '';
+      const userName = profileData?.fullName || authUser?.user_metadata?.full_name || userData.email?.split('@')[0] || 'User';
+
+      const userObject = {
+        id: userData.id,
+        name: userName,
+        email: userEmail,
+        role: userRole,
+        avatar: profileData?.avatarUrl,
+        phone: userData.phone,
+        createdAt: new Date(userData.createdAt),
+        isVerified: userData.status === 'ACTIVE',
+        ...roleSpecificData
+      };
+
+      console.log('[AuthContext] loadUserProfile - Setting user object:', {
+        id: userObject.id,
+        email: userObject.email,
+        role: userObject.role,
+        name: userObject.name,
+        specialty: userObject.specialty
+      });
+
+      setUser(userObject);
+      return;
     }
 
     console.error('[AuthContext] loadUserProfile - Failed after all retries');
