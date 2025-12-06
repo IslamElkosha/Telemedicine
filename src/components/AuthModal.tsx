@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { useAuth, RegistrationData, AuthError } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
     license: ''
   });
   const { login, register } = useAuth();
+  const navigate = useNavigate();
 
   if (!isOpen) return null;
 
@@ -67,11 +69,21 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
 
         if (result.success) {
           setSuccess(true);
-          console.log('[AuthModal] Login successful, LandingPage will handle redirect');
-          setTimeout(() => {
-            onClose();
-          }, 300);
+          console.log('[AuthModal] Login successful, navigating to dashboard');
+
+          const dashboardRoute = selectedRole === 'patient' ? '/patient' :
+                                selectedRole === 'doctor' ? '/doctor' :
+                                selectedRole === 'technician' ? '/technician' :
+                                selectedRole === 'admin' ? '/admin' :
+                                selectedRole === 'hospital' ? '/hospital' :
+                                selectedRole === 'freelance-tech' ? '/freelance-tech' :
+                                `/${selectedRole}`;
+
+          console.log('[AuthModal] Explicit navigation to:', dashboardRoute);
+          onClose();
+          navigate(dashboardRoute);
         } else {
+          console.error('[AuthModal] Login failed:', result.error);
           setError(result.error || { message: 'Login failed' });
         }
       } else {
@@ -91,14 +103,27 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
         const result = await register(registrationData);
         if (result.success) {
           setSuccess(true);
-          console.log('[AuthModal] Registration successful, LandingPage will handle redirect');
-          setTimeout(() => {
-            onClose();
-          }, 300);
+          console.log('[AuthModal] Registration successful, navigating to dashboard');
+
+          const dashboardRoute = selectedRole === 'patient' ? '/patient' :
+                                selectedRole === 'doctor' ? '/doctor' :
+                                selectedRole === 'technician' ? '/technician' :
+                                selectedRole === 'admin' ? '/admin' :
+                                selectedRole === 'hospital' ? '/hospital' :
+                                selectedRole === 'freelance-tech' ? '/freelance-tech' :
+                                `/${selectedRole}`;
+
+          console.log('[AuthModal] Explicit navigation to:', dashboardRoute);
+          onClose();
+          navigate(dashboardRoute);
         } else {
+          console.error('[AuthModal] Registration failed:', result.error);
           setError(result.error || { message: 'Registration failed' });
         }
       }
+    } catch (error: any) {
+      console.error('[AuthModal] Unexpected error during form submission:', error);
+      setError({ message: error?.message || 'An unexpected error occurred. Please try again.' });
     } finally {
       setSubmitting(false);
     }
