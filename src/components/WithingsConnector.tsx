@@ -76,7 +76,7 @@ const WithingsConnector: React.FC = () => {
         .from('withings_tokens')
         .select('*')
         .eq('user_id', session.user.id)
-        .single();
+        .maybeSingle();
 
       if (error || !tokenData) {
         setStatus({ connected: false });
@@ -142,14 +142,20 @@ const WithingsConnector: React.FC = () => {
         return;
       }
 
-      if (!session) {
-        console.error('[WithingsConnector] No active session found');
-        setError('Please log in to connect Withings devices');
+      if (!session || !session.access_token) {
+        console.error('[WithingsConnector] No active session or access token found');
+        setError('Please log in to connect Withings devices. If already logged in, try refreshing the page.');
         return;
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        console.error('[WithingsConnector] Missing environment variables');
+        setError('Configuration error: Missing Supabase credentials');
+        return;
+      }
 
       console.log('[WithingsConnector] Environment check:', {
         hasUrl: !!supabaseUrl,
@@ -161,6 +167,8 @@ const WithingsConnector: React.FC = () => {
         'Authorization': `Bearer ${session.access_token}`,
         'apikey': supabaseAnonKey,
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
       };
 
       console.log('[WithingsConnector] Request headers prepared:', {
