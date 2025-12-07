@@ -15,7 +15,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, cache-control, pragma',
 };
 
-async function refreshWithingsToken(supabase: any, userId: string, refreshToken: string) {
+async function refreshWithingsToken(supabaseAdmin: any, userId: string, refreshToken: string) {
   console.log('Attempting to refresh Withings access token...');
 
   const tokenUrl = 'https://wbsapi.withings.net/v2/oauth2';
@@ -52,7 +52,7 @@ async function refreshWithingsToken(supabase: any, userId: string, refreshToken:
 
     console.log('Token refreshed successfully. Updating database...');
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('withings_tokens')
       .update({
         access_token: newAccessToken,
@@ -110,28 +110,37 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('Missing authorization header');
-      throw new Error('Missing Authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Missing Authorization header', connectionStatus: 'Disconnected' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      }
+    });
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    
     if (userError || !user) {
       console.error('User authentication failed:', userError);
-      throw new Error('Invalid or Expired Token');
+      return new Response(
+        JSON.stringify({ error: 'Invalid or Expired Token', connectionStatus: 'Disconnected' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log('Authenticated user:', user.id);
 
-    const { data: tokenData, error: tokenError } = await supabase
+    const { data: tokenData, error: tokenError } = await supabaseAdmin
       .from('withings_tokens')
       .select('*')
       .eq('user_id', user.id)
@@ -161,14 +170,14 @@ Deno.serve(async (req: Request) => {
     if (isExpired || willExpireSoon) {
       console.log('Access token expired or expiring soon. Refreshing...');
       const newAccessToken = await refreshWithingsToken(
-        supabase,
+        supabaseAdmin,
         user.id,
         tokenData.refresh_token
       );
 
       if (!newAccessToken) {
         console.error('Token refresh failed. Deleting tokens.');
-        await supabase
+        await supabaseAdmin
           .from('withings_tokens')
           .delete()
           .eq('user_id', user.id);
@@ -222,7 +231,7 @@ Deno.serve(async (req: Request) => {
         if (measureData.status === 401) {
           console.error('Invalid or expired access token (401). Deleting tokens and requiring reconnection.');
 
-          await supabase
+          await supabaseAdmin
             .from('withings_tokens')
             .delete()
             .eq('user_id', user.id);
@@ -375,7 +384,7 @@ Deno.serve(async (req: Request) => {
     };
 
     console.log('Saving to withings_measurements table...');
-    const { error: dbError } = await supabase
+    const { error: dbError } = await supabaseAdmin
       .from('withings_measurements')
       .upsert(dbRecord, { onConflict: 'withings_measure_id', ignoreDuplicates: true });
 
@@ -386,7 +395,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('Updating user_vitals_live table...');
-    const { error: liveError } = await supabase
+    const { error: liveError } = await supabaseAdmin
       .from('user_vitals_live')
       .upsert({
         user_id: user.id,
