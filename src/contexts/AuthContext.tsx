@@ -127,33 +127,57 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const initializeAuth = async () => {
       try {
-        console.log('[AuthContext] Initializing auth...');
-        console.log('[AuthContext] Checking localStorage for session:', !!localStorage.getItem('telemedicine-auth'));
+        console.log('[AuthContext] ========== Initializing Auth ==========');
 
+        const storageData = localStorage.getItem('telemedicine-auth');
+        console.log('[AuthContext] LocalStorage check:', {
+          hasStorageData: !!storageData,
+          storageLength: storageData?.length,
+          storagePreview: storageData?.substring(0, 100) + '...'
+        });
+
+        console.log('[AuthContext] Calling supabase.auth.getSession()...');
+        const sessionStart = Date.now();
         const { data: { session }, error } = await supabase.auth.getSession();
+        const sessionTime = Date.now() - sessionStart;
 
+        console.log('[AuthContext] getSession completed in', sessionTime, 'ms');
         console.log('[AuthContext] getSession result:', {
           hasSession: !!session,
           hasUser: !!session?.user,
           userId: session?.user?.id,
           userEmail: session?.user?.email,
-          accessToken: session?.access_token ? session.access_token.substring(0, 20) + '...' : null,
+          hasAccessToken: !!session?.access_token,
+          accessTokenPrefix: session?.access_token ? session.access_token.substring(0, 20) + '...' : null,
           expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
-          error: error?.message
+          expiresIn: session?.expires_at ? Math.floor((session.expires_at * 1000 - Date.now()) / 1000 / 60) + ' minutes' : null,
+          hasError: !!error,
+          errorMessage: error?.message,
+          errorCode: error?.code
         });
 
-        if (!mounted) return;
+        if (!mounted) {
+          console.log('[AuthContext] Component unmounted during initialization');
+          return;
+        }
 
         if (session?.user) {
-          console.log('[AuthContext] Session found, loading profile for:', session.user.id);
+          console.log('[AuthContext] ✓ Valid session found, loading profile for:', session.user.id);
           await loadUserProfile(session.user.id);
         } else {
-          console.log('[AuthContext] No session found, user needs to login');
+          console.log('[AuthContext] ✗ No session found, user needs to login');
+          console.log('[AuthContext] This is expected for first-time visitors or logged-out users');
           setUser(null);
           setLoading(false);
         }
+
+        console.log('[AuthContext] ========== Auth Initialization Complete ==========');
       } catch (error) {
-        console.error('[AuthContext] Error initializing auth:', error);
+        console.error('[AuthContext] ❌ Error initializing auth:', error);
+        console.error('[AuthContext] Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
         if (mounted) {
           setUser(null);
           setLoading(false);
@@ -164,15 +188,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AuthContext] Auth state changed:', event, {
+      console.log('[AuthContext] Auth state changed:', {
+        event,
         hasSession: !!session,
-        userId: session?.user?.id
+        userId: session?.user?.id,
+        hasAccessToken: !!session?.access_token,
+        mounted,
+        timestamp: new Date().toISOString()
       });
 
-      if (!mounted) return;
+      if (!mounted) {
+        console.log('[AuthContext] Component unmounted, skipping auth state change');
+        return;
+      }
 
-      if (event === 'SIGNED_IN' && session?.user) {
-        console.log('[AuthContext] User signed in, loading profile');
+      if (event === 'INITIAL_SESSION') {
+        console.log('[AuthContext] Initial session detected');
+        if (session?.user) {
+          console.log('[AuthContext] Restoring session for user:', session.user.id);
+          await loadUserProfile(session.user.id);
+        } else {
+          console.log('[AuthContext] No initial session found');
+          setUser(null);
+          setLoading(false);
+        }
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        console.log('[AuthContext] User signed in event, loading profile');
         await loadUserProfile(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         console.log('[AuthContext] User signed out, clearing state');
@@ -183,6 +224,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!user || user.id !== session.user.id) {
           await loadUserProfile(session.user.id);
         }
+      } else if (event === 'USER_UPDATED' && session?.user) {
+        console.log('[AuthContext] User updated, reloading profile');
+        await loadUserProfile(session.user.id);
       } else if (!session) {
         console.log('[AuthContext] No session in auth state change, clearing user');
         setUser(null);
@@ -566,32 +610,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log('[AuthContext] Role matches, proceeding with login');
       }
 
-      console.log('[AuthContext] Loading user profile...');
+      console.log('[AuthContext] Verifying session immediately after signIn...');
+      const { data: { session: immediateSession } } = await supabase.auth.getSession();
+      console.log('[AuthContext] Immediate session check:', {
+        hasSession: !!immediateSession,
+        hasAccessToken: !!immediateSession?.access_token,
+        userId: immediateSession?.user?.id,
+        storageData: localStorage.getItem('telemedicine-auth')?.substring(0, 50) + '...'
+      });
+
+      if (!immediateSession) {
+        console.error('[AuthContext] CRITICAL: Session not created after signInWithPassword!');
+        return { success: false, error: { message: 'Session creation failed. Please try again.' } };
+      }
+
+      console.log('[AuthContext] Session verified, loading user profile...');
       const profileLoadStart = Date.now();
 
       await loadUserProfile(authData.user.id);
 
       const profileLoadTime = Date.now() - profileLoadStart;
       console.log('[AuthContext] Profile loaded:', {
-        elapsedMs: profileLoadTime
+        elapsedMs: profileLoadTime,
+        userStateSet: !!user
       });
 
-      console.log('[AuthContext] Allowing React state to propagate...');
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      console.log('[AuthContext] Verifying session was saved to storage...');
-      const { data: { session: verifySession } } = await supabase.auth.getSession();
-      console.log('[AuthContext] Session verification:', {
-        hasSession: !!verifySession,
-        hasUser: !!verifySession?.user,
-        userId: verifySession?.user?.id,
-        userEmail: verifySession?.user?.email,
+      console.log('[AuthContext] Final verification of session persistence...');
+      const { data: { session: finalSession } } = await supabase.auth.getSession();
+      console.log('[AuthContext] Final session check:', {
+        hasSession: !!finalSession,
+        hasUser: !!finalSession?.user,
+        userId: finalSession?.user?.id,
         storageKey: 'telemedicine-auth',
-        storageHasData: !!localStorage.getItem('telemedicine-auth')
+        storageExists: !!localStorage.getItem('telemedicine-auth'),
+        storageLength: localStorage.getItem('telemedicine-auth')?.length
       });
 
-      if (!verifySession) {
-        console.error('[AuthContext] CRITICAL: Session not found after login! This is a persistence issue.');
+      if (!finalSession) {
+        console.error('[AuthContext] CRITICAL: Session lost after profile load!');
         return { success: false, error: { message: 'Session persistence failed. Please try again.' } };
       }
 

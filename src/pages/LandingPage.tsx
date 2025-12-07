@@ -15,8 +15,18 @@ const LandingPage: React.FC = () => {
   const redirectTo = (location.state as any)?.from;
 
   useEffect(() => {
+    console.log('[LandingPage] useEffect triggered, checking auth state:', {
+      loading,
+      isAuthenticated,
+      hasUser: !!user,
+      userId: user?.id,
+      userRole: user?.role,
+      isAuthModalOpen,
+      timestamp: new Date().toISOString()
+    });
+
     if (loading) {
-      console.log('[LandingPage] Still loading auth state');
+      console.log('[LandingPage] Still loading auth state, waiting...');
       return;
     }
 
@@ -25,29 +35,32 @@ const LandingPage: React.FC = () => {
       return;
     }
 
-    console.log('[LandingPage] Auth state:', {
-      isAuthenticated,
-      hasUser: !!user,
-      userRole: user?.role,
-      userEmail: user?.email,
-      userId: user?.id,
-      loading
-    });
-
-    if (isAuthenticated && user && user.id && !loading) {
+    if (isAuthenticated && user && user.id) {
       const dashboardRoute = getRoleDashboardRoute(user.role);
-      console.log('[LandingPage] User fully authenticated, redirecting to:', {
+      console.log('[LandingPage] ✓ User fully authenticated, preparing redirect:', {
         userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
         userRole: user.role,
         dashboardRoute,
         timestamp: new Date().toISOString()
       });
 
-      setTimeout(() => {
+      console.log('[LandingPage] Navigating to dashboard in 100ms...');
+      const timer = setTimeout(() => {
+        console.log('[LandingPage] Executing navigation to:', dashboardRoute);
         navigate(dashboardRoute, { replace: true });
-      }, 50);
+      }, 100);
+
+      return () => clearTimeout(timer);
+    } else {
+      console.log('[LandingPage] User not authenticated or incomplete:', {
+        isAuthenticated,
+        hasUser: !!user,
+        hasUserId: !!user?.id
+      });
     }
-  }, [isAuthenticated, user, loading, isAuthModalOpen, navigate]);
+  }, [isAuthenticated, user, user?.id, user?.role, loading, isAuthModalOpen, navigate]);
 
   const handleRoleSelect = (role: string) => {
     setSelectedRole(role);
