@@ -5,6 +5,7 @@ import WithingsConnector from '../components/WithingsConnector';
 import WithingsMeasurements from '../components/WithingsMeasurements';
 import WithingsDeviceReadings from '../components/WithingsDeviceReadings';
 import WithingsKitDevices from '../components/WithingsKitDevices';
+import WithingsDebugger from '../components/WithingsDebugger';
 import { 
   Activity, 
   Bluetooth, 
@@ -396,6 +397,8 @@ const PatientDevicesPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Device List */}
           <div className="lg:col-span-2 space-y-6">
+            <WithingsDebugger />
+
             <WithingsKitDevices />
 
             <WithingsDeviceReadings showRefresh={true} />
