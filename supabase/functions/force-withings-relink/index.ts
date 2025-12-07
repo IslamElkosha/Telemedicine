@@ -19,18 +19,25 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      console.error('Missing Authorization Header');
+      console.error('❌ Missing Authorization Header');
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+      console.error('❌ Missing environment variables');
+      throw new Error('Server configuration error');
+    }
 
     console.log('Step 1: Verify User Identity (Client A - Standard Auth)');
+    console.log('→ Using ANON_KEY client for authentication check');
+
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: { Authorization: authHeader }
@@ -45,16 +52,19 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: authError } = await userClient.auth.getUser();
 
     if (authError || !user) {
-      console.error('Auth Failed:', authError);
+      console.error('❌ Auth Failed:', authError?.message || 'No user found');
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('✓ User authenticated:', user.id);
+    console.log('✅ User authenticated:', user.id);
 
     console.log('Step 2: Delete Tokens (Client B - Service Role Bypass)');
+    console.log('→ Using SERVICE_ROLE_KEY client for database write');
+    console.log('→ This bypasses RLS and cannot fail with 401/403');
+
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
@@ -70,14 +80,18 @@ Deno.serve(async (req: Request) => {
       .select();
 
     if (deleteError) {
-      console.error('Error deleting tokens:', deleteError);
+      console.error('❌ Database Error:', deleteError.message);
+      console.error('Details:', deleteError);
       return new Response(
-        JSON.stringify({ error: 'Database error', details: deleteError.message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: 'Database error',
+          details: deleteError.message
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('✓ Tokens deleted successfully:', deletedData?.length || 0, 'records');
+    console.log('✅ Tokens deleted successfully:', deletedData?.length || 0, 'records');
 
     console.log('Step 3: Generating fresh OAuth authorization URL');
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
@@ -91,7 +105,7 @@ Deno.serve(async (req: Request) => {
     authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('scope', scope);
 
-    console.log('✓ OAuth URL generated');
+    console.log('✅ OAuth URL generated');
     console.log('=== FORCE RELINK COMPLETE ===');
 
     return new Response(
@@ -105,12 +119,14 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error: any) {
-    console.error('Function Error:', error);
+    console.error('❌ Function Error:', error.message);
+    console.error('Stack:', error.stack);
     return new Response(
       JSON.stringify({
-        error: error.message || 'Internal server error'
+        error: error.message || 'Internal server error',
+        type: error.name || 'UnknownError'
       }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
