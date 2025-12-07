@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Thermometer, Link as LinkIcon, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { invokeEdgeFunction } from '../lib/edgeFunctions';
 
 interface DeviceStatus {
   name: string;
@@ -131,57 +132,11 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const handleLinkDevice = async () => {
     try {
-      console.log('[WithingsKitDevices] Getting fresh session for device linking...');
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        console.error('[WithingsKitDevices] No active session found');
-        alert('Please log in to connect Withings devices');
-        return;
-      }
-
-      console.log('[WithingsKitDevices] Session obtained, user ID:', session.user.id);
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
       console.log('[WithingsKitDevices] Initiating force relink to clear any expired tokens...');
-      console.log('[WithingsKitDevices] Using Authorization header with token');
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const result = await invokeEdgeFunction<{ success: boolean; authUrl: string; tokensDeleted?: number; error?: string }>('force-withings-relink');
 
-      console.log('[WithingsKitDevices] Response status:', response.status);
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to generate authorization URL';
-
-        try {
-          const result = await response.json();
-          errorMessage = result.error || errorMessage;
-
-          if (response.status === 401) {
-            console.error('[WithingsKitDevices] 401 Unauthorized - Session may be invalid');
-            errorMessage = 'Authentication failed. Please try logging out and back in.';
-          } else if (response.status === 406) {
-            console.error('[WithingsKitDevices] 406 Not Acceptable - Database access issue');
-            errorMessage = 'Database permission error. Please contact support.';
-          }
-
-          console.error('[WithingsKitDevices] Error details:', result);
-        } catch (parseError) {
-          console.error('[WithingsKitDevices] Could not parse error response');
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-
-      if (!result.success) {
+      if (!result.success || !result.authUrl) {
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
@@ -196,21 +151,9 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const subscribeToNotifications = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
       console.log('Subscribing to Withings notifications...');
-      const response = await fetch(`${supabaseUrl}/functions/v1/subscribe-withings-notify`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
 
-      const result = await response.json();
+      const result = await invokeEdgeFunction<{ success: boolean; alreadySubscribed?: boolean; message?: string; error?: string }>('subscribe-withings-notify');
 
       if (result.success || result.alreadySubscribed) {
         console.log('Webhook notifications enabled:', result.message);

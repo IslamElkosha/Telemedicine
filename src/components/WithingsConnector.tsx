@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Heart, Thermometer, Droplet, Link as LinkIcon, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { invokeEdgeFunction } from '../lib/edgeFunctions';
 
 interface WithingsStatus {
   connected: boolean;
@@ -89,25 +90,10 @@ const WithingsConnector: React.FC = () => {
   const handleConnect = async () => {
     try {
       setError(null);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Please log in to connect Withings devices');
-        return;
-      }
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const result = await invokeEdgeFunction<{ success: boolean; authUrl: string; error?: string }>('start-withings-auth');
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/start-withings-auth`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
+      if (!result.success || !result.authUrl) {
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
@@ -123,52 +109,13 @@ const WithingsConnector: React.FC = () => {
       setSyncing(true);
       setError(null);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Please log in to sync measurements');
-        return;
-      }
+      const result = await invokeEdgeFunction<{ success: boolean; error?: string }>('withings-fetch-measurements');
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        if (result.needsRefresh) {
-          const refreshResponse = await fetch(`${supabaseUrl}/functions/v1/withings-refresh-token`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (refreshResponse.ok) {
-            const retryResponse = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
-              headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json',
-              },
-            });
-            const retryResult = await retryResponse.json();
-
-            if (retryResponse.ok) {
-              await checkConnection();
-              return;
-            }
-          }
-        }
+      if (result.success) {
+        await checkConnection();
+      } else {
         throw new Error(result.error || 'Failed to sync measurements');
       }
-
-      await checkConnection();
     } catch (err: any) {
       console.error('Error syncing measurements:', err);
       setError(err.message);
