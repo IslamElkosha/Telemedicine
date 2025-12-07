@@ -19,10 +19,14 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('Missing authorization header');
-      throw new Error('Missing Authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Missing Authorization header' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const supabase = createClient(
+    console.log('Step 1: Creating User Client for authentication verification');
+    const userClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
@@ -32,16 +36,31 @@ Deno.serve(async (req: Request) => {
       }
     );
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
     if (userError || !user) {
       console.error('Authentication failed:', userError);
-      throw new Error('Invalid or Expired Token');
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log('User authenticated:', user.id);
 
-    console.log('Step 1: Deleting expired/invalid tokens from database');
-    const { error: deleteError, data: deletedData } = await supabase
+    console.log('Step 2: Creating Admin Client for database operations');
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+    console.log('Step 3: Deleting expired/invalid tokens from database');
+    const { error: deleteError, data: deletedData } = await adminClient
       .from('withings_tokens')
       .delete()
       .eq('user_id', user.id)
@@ -49,7 +68,10 @@ Deno.serve(async (req: Request) => {
 
     if (deleteError) {
       console.error('Error deleting tokens:', deleteError);
-      throw new Error(`Failed to delete tokens: ${deleteError.message}`);
+      return new Response(
+        JSON.stringify({ error: `Failed to delete tokens: ${deleteError.message}` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
@@ -86,10 +108,10 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
-        error: error.message || 'Internal server error'
+        error: error.message || 'Failed to process relink request'
       }),
       {
-        status: 401,
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
