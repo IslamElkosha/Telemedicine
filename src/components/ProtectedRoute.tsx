@@ -18,6 +18,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
     loading,
     isAuthenticated,
     hasUser: !!user,
+    userId: user?.id,
     userRole: user?.role,
     allowedRoles,
     timestamp: new Date().toISOString()
@@ -39,8 +40,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
     );
   }
 
-  if (!isAuthenticated || !user) {
-    console.log('[ProtectedRoute] Redirecting to home - not authenticated or no user');
+  if (!isAuthenticated || !user || !user.id) {
+    console.log('[ProtectedRoute] Redirecting to home - authentication incomplete:', {
+      isAuthenticated,
+      hasUser: !!user,
+      hasUserId: !!user?.id
+    });
     return <Navigate to="/" state={{ from: location.pathname }} replace />;
   }
 

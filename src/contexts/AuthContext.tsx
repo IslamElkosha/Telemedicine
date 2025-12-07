@@ -544,6 +544,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         elapsedMs: profileLoadTime
       });
 
+      console.log('[AuthContext] Allowing React state to propagate...');
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       console.log('[AuthContext] Login completed successfully, total time:', {
         totalMs: Date.now() - startTime,
         totalSec: ((Date.now() - startTime) / 1000).toFixed(2) + 's'

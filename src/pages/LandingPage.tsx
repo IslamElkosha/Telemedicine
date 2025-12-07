@@ -30,17 +30,22 @@ const LandingPage: React.FC = () => {
       hasUser: !!user,
       userRole: user?.role,
       userEmail: user?.email,
+      userId: user?.id,
       loading
     });
 
-    if (isAuthenticated && user && !loading) {
+    if (isAuthenticated && user && user.id && !loading) {
       const dashboardRoute = getRoleDashboardRoute(user.role);
-      console.log('[LandingPage] User authenticated, redirecting to:', {
+      console.log('[LandingPage] User fully authenticated, redirecting to:', {
+        userId: user.id,
         userRole: user.role,
         dashboardRoute,
         timestamp: new Date().toISOString()
       });
-      navigate(dashboardRoute, { replace: true });
+
+      setTimeout(() => {
+        navigate(dashboardRoute, { replace: true });
+      }, 50);
     }
   }, [isAuthenticated, user, loading, isAuthModalOpen, navigate]);
 

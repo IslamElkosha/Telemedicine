@@ -1,29 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = 'https://kwlommrclqhpvthqxcge.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3bG9tbXJjbHFocHZ0aHF4Y2dlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5NjMwMzYsImV4cCI6MjA3NTUzOTAzNn0.w2Fpmdd31YXV_k4Q9yShBx_iFOZ5LWSuVG3mpeqNQdk';
 
-console.log('[Supabase] Initializing client with:', {
+console.log('[Supabase] Initializing client with hardcoded credentials:', {
   url: supabaseUrl,
   hasUrl: !!supabaseUrl,
   hasAnonKey: !!supabaseAnonKey,
-  anonKeyPrefix: supabaseAnonKey?.substring(0, 20) + '...'
+  anonKeyPrefix: supabaseAnonKey?.substring(0, 20) + '...',
+  storageType: 'localStorage',
+  persistSession: true
 });
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('[Supabase] Missing environment variables:', {
-    VITE_SUPABASE_URL: supabaseUrl,
-    VITE_SUPABASE_ANON_KEY: supabaseAnonKey
-  });
-  throw new Error('Missing Supabase environment variables');
-}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: localStorage,
+    storage: window.localStorage,
+    storageKey: 'telemedicine-auth',
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false
+    detectSessionInUrl: true,
+    flowType: 'implicit'
   },
   realtime: {
     params: {
@@ -40,7 +36,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-console.log('[Supabase] Client initialized successfully');
+console.log('[Supabase] Client initialized successfully with enhanced persistence');
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
