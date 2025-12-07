@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { X, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { useAuth, RegistrationData, AuthError } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getRoleDashboardRoute } from '../utils/navigation';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -29,8 +30,17 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
   });
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   if (!isOpen) return null;
+
+  const getRedirectPath = () => {
+    const from = (location.state as any)?.from;
+    if (from && from !== '/') {
+      return from;
+    }
+    return getRoleDashboardRoute(selectedRole as any);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,19 +79,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
 
         if (result.success) {
           setSuccess(true);
-          console.log('[AuthModal] Login successful, navigating to dashboard');
+          const redirectPath = getRedirectPath();
+          console.log('[AuthModal] Login successful, navigating to:', redirectPath);
 
-          const dashboardRoute = selectedRole === 'patient' ? '/patient' :
-                                selectedRole === 'doctor' ? '/doctor' :
-                                selectedRole === 'technician' ? '/technician' :
-                                selectedRole === 'admin' ? '/admin' :
-                                selectedRole === 'hospital' ? '/hospital' :
-                                selectedRole === 'freelance-tech' ? '/freelance-tech' :
-                                `/${selectedRole}`;
-
-          console.log('[AuthModal] Explicit navigation to:', dashboardRoute);
-          onClose();
-          navigate(dashboardRoute);
+          setTimeout(() => {
+            onClose();
+            navigate(redirectPath, { replace: true });
+          }, 500);
         } else {
           console.error('[AuthModal] Login failed:', result.error);
           setError(result.error || { message: 'Login failed' });

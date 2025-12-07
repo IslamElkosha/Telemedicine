@@ -553,8 +553,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+    try {
+      console.log('[AuthContext] Logout initiated');
+      loadingProfileRef.current = false;
+      await supabase.auth.signOut();
+      setUser(null);
+      setLoading(false);
+      console.log('[AuthContext] Logout completed successfully');
+    } catch (error) {
+      console.error('[AuthContext] Error during logout:', error);
+      setUser(null);
+      setLoading(false);
+    }
   };
 
   const register = async (userData: RegistrationData): Promise<{ success: boolean; error?: AuthError }> => {

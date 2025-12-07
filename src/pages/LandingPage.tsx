@@ -1,29 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Heart, Shield, Users, Video, Stethoscope, Calendar } from 'lucide-react';
 import AuthModal from '../components/AuthModal';
+import { getRoleDashboardRoute } from '../utils/navigation';
 
 const LandingPage: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
 
-  const getRoleDashboardRoute = (role: string) => {
-    const dashboardRoutes: { [key: string]: string } = {
-      'patient': '/patient',
-      'doctor': '/doctor',
-      'technician': '/technician',
-      'admin': '/admin',
-      'hospital': '/hospital',
-      'freelance-tech': '/freelance-tech'
-    };
-    return dashboardRoutes[role] || `/${role}`;
-  };
+  useEffect(() => {
+    if (loading) {
+      console.log('[LandingPage] Still loading auth state...');
+      return;
+    }
 
-  React.useEffect(() => {
-    console.log('[LandingPage] useEffect triggered:', {
+    console.log('[LandingPage] Auth state:', {
       isAuthenticated,
       hasUser: !!user,
       userRole: user?.role,
@@ -37,15 +31,9 @@ const LandingPage: React.FC = () => {
         dashboardRoute,
         timestamp: new Date().toISOString()
       });
-      navigate(dashboardRoute);
-    } else {
-      console.log('[LandingPage] Not redirecting:', {
-        isAuthenticated,
-        hasUser: !!user,
-        reason: !isAuthenticated ? 'not authenticated' : 'no user object'
-      });
+      navigate(dashboardRoute, { replace: true });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, loading, navigate]);
 
   const handleRoleSelect = (role: string) => {
     setSelectedRole(role);
