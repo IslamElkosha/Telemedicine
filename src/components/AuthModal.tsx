@@ -83,17 +83,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
           setSuccess(true);
           console.log('[AuthModal] Login successful, user profile loaded');
 
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          const redirectPath = getRedirectPath();
-          console.log('[AuthModal] Closing modal and navigating to:', redirectPath);
-
-          onClose();
-
           setTimeout(() => {
-            console.log('[AuthModal] Executing navigation to:', redirectPath);
-            navigate(redirectPath, { replace: true });
-          }, 150);
+            console.log('[AuthModal] Closing modal, LandingPage will handle redirect');
+            onClose();
+          }, 800);
         } else {
           console.error('[AuthModal] Login failed:', result.error);
           setError(result.error || { message: 'Login failed' });
