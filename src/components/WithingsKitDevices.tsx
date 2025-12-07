@@ -160,7 +160,10 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
       console.log('[LinkDevice] Access token (first 30 chars):', session.access_token.substring(0, 30) + '...');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const redirectUri = `${window.location.origin}/withings-callback`;
+
       console.log('[LinkDevice] Supabase URL:', supabaseUrl);
+      console.log('[LinkDevice] Redirect URI:', redirectUri);
 
       console.log('[LinkDevice] Initiating force relink to clear any expired tokens...');
       const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
@@ -169,6 +172,9 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          redirectUri
+        }),
       });
 
       console.log('[LinkDevice] Response status:', response.status, response.statusText);
@@ -179,6 +185,11 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
       if (!response.ok || !result.success) {
         console.error('[LinkDevice] Edge function failed:', result);
         throw new Error(result.error || 'Failed to generate authorization URL');
+      }
+
+      if (result.state) {
+        sessionStorage.setItem('withings_auth_state', result.state);
+        console.log('[LinkDevice] State saved to sessionStorage');
       }
 
       console.log('[LinkDevice] Force relink successful. Tokens deleted:', result.tokensDeleted);

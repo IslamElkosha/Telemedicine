@@ -61,6 +61,11 @@ Deno.serve(async (req: Request) => {
 
     console.log('✅ User authenticated:', user.id);
 
+    const requestBody = await req.json().catch(() => ({}));
+    const redirectUri = requestBody.redirectUri || `${new URL(req.url).origin}/withings-callback`;
+
+    console.log('→ Redirect URI:', redirectUri);
+
     console.log('Step 2: Delete Tokens (Client B - Service Role Bypass)');
     console.log('→ Using SERVICE_ROLE_KEY client for database write');
     console.log('→ This bypasses RLS and cannot fail with 401/403');
@@ -94,9 +99,8 @@ Deno.serve(async (req: Request) => {
     console.log('✅ Tokens deleted successfully:', deletedData?.length || 0, 'records');
 
     console.log('Step 3: Generating fresh OAuth authorization URL');
-    const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
     const scope = 'user.metrics,user.info';
-    const state = user.id;
+    const state = crypto.randomUUID();
 
     const authUrl = new URL(WITHINGS_AUTH_URL);
     authUrl.searchParams.append('response_type', 'code');
@@ -112,6 +116,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         authUrl: authUrl.toString(),
+        state: state,
         message: 'Expired tokens cleared. Please authorize again.',
         tokensDeleted: deletedData?.length || 0
       }),

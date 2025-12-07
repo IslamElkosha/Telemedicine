@@ -78,7 +78,7 @@ const WithingsCallbackPage: React.FC = () => {
       setMessage('Withings account linked successfully!');
 
       setTimeout(() => {
-        navigate('/patient/devices');
+        navigate('/');
       }, 2000);
     } catch (error: any) {
       console.error('[WithingsCallback] Error:', error);
