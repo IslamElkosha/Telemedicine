@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Withings Auth</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    .log {
+      background: #f4f4f4;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .error { background: #ffe0e0; color: #c00; }
+    .success { background: #e0ffe0; color: #060; }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+    button:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <h1>Withings Auth Diagnostic Tool</h1>
+
+  <div>
+    <h3>Step 1: Login</h3>
+    <input type="email" id="email" placeholder="Email" value="patient@test.com">
+    <input type="password" id="password" placeholder="Password" value="password123">
+    <button onclick="login()">Login</button>
+  </div>
+
+  <div>
+    <h3>Step 2: Test Force Relink</h3>
+    <button onclick="testForceRelink()">Test Force Withings Relink</button>
+  </div>
+
+  <div id="logs"></div>
+
+  <script>
+    const SUPABASE_URL = 'https://kwlommrclqhpvthqxcge.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3bG9tbXJjbHFocHZ0aHF4Y2dlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5NjMwMzYsImV4cCI6MjA3NTUzOTAzNn0.w2Fpmdd31YXV_k4Q9yShBx_iFOZ5LWSuVG3mpeqNQdk';
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function addLog(message, type = 'log') {
+      const logsDiv = document.getElementById('logs');
+      const logEntry = document.createElement('div');
+      logEntry.className = `log ${type}`;
+      logEntry.textContent = typeof message === 'object' ? JSON.stringify(message, null, 2) : message;
+      logsDiv.appendChild(logEntry);
+      console.log(message);
+    }
+
+    async function login() {
+      try {
+        addLog('Attempting login...');
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (error) {
+          addLog('Login error: ' + error.message, 'error');
+          return;
+        }
+
+        addLog('Login successful!', 'success');
+        addLog('User: ' + data.user.email);
+        addLog('Access token (first 50 chars): ' + data.session.access_token.substring(0, 50));
+      } catch (err) {
+        addLog('Exception during login: ' + err.message, 'error');
+      }
+    }
+
+    async function testForceRelink() {
+      try {
+        addLog('=== Testing Force Withings Relink ===');
+
+        // Get current session
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !sessionData.session) {
+          addLog('No active session. Please login first.', 'error');
+          return;
+        }
+
+        addLog('Active session found for user: ' + sessionData.session.user.id);
+        addLog('Token (first 50): ' + sessionData.session.access_token.substring(0, 50));
+
+        // Call the edge function
+        addLog('Calling force-withings-relink edge function...');
+
+        const { data, error } = await supabase.functions.invoke('force-withings-relink', {
+          body: {},
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`
+          }
+        });
+
+        if (error) {
+          addLog('Edge function error:', 'error');
+          addLog(JSON.stringify(error, null, 2), 'error');
+          return;
+        }
+
+        addLog('Edge function response:', 'success');
+        addLog(JSON.stringify(data, null, 2), 'success');
+
+        if (data.success) {
+          addLog('✓ Success! Auth URL generated:', 'success');
+          addLog('Auth URL: ' + data.authUrl);
+          addLog('Tokens deleted: ' + data.tokensDeleted);
+
+          // Show redirect option
+          if (confirm('Redirect to Withings authorization page?')) {
+            window.location.href = data.authUrl;
+          }
+        } else {
+          addLog('Edge function returned success=false', 'error');
+          addLog('Error: ' + (data.error || 'Unknown error'));
+        }
+
+      } catch (err) {
+        addLog('Exception during force relink: ' + err.message, 'error');
+        addLog('Stack: ' + err.stack, 'error');
+      }
+    }
+  </script>
+</body>
+</html>
