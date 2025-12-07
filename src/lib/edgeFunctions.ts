@@ -20,15 +20,16 @@ export async function invokeEdgeFunction<T = any>(
 ): Promise<T> {
   console.log(`[EdgeFn] Calling ${functionName}...`);
 
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  console.log(`[EdgeFn] Refreshing session to ensure valid token...`);
+  const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
 
   if (sessionError || !session) {
     console.error(`[EdgeFn] Authentication required: No active session.`, sessionError);
-    throw new Error("Authentication required: No active session.");
+    throw new Error("Authentication required: Please log in again.");
   }
 
   console.log(`[EdgeFn] Authenticated as User: ${session.user.id}`);
-  console.log(`[EdgeFn] Token preview: ${session.access_token.substring(0, 20)}...`);
+  console.log(`[EdgeFn] Fresh token obtained, preview: ${session.access_token.substring(0, 20)}...`);
 
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: body,
