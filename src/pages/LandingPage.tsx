@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Heart, Shield, Users, Video, Stethoscope, Calendar } from 'lucide-react';
 import AuthModal from '../components/AuthModal';
@@ -9,11 +9,14 @@ const LandingPage: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, user, loading } = useAuth();
 
+  const redirectTo = (location.state as any)?.from;
+
   useEffect(() => {
-    if (loading) {
-      console.log('[LandingPage] Still loading auth state...');
+    if (loading || isAuthModalOpen) {
+      console.log('[LandingPage] Skipping auto-redirect:', { loading, isAuthModalOpen });
       return;
     }
 
@@ -33,7 +36,7 @@ const LandingPage: React.FC = () => {
       });
       navigate(dashboardRoute, { replace: true });
     }
-  }, [isAuthenticated, user, loading, navigate]);
+  }, [isAuthenticated, user, loading, isAuthModalOpen, navigate]);
 
   const handleRoleSelect = (role: string) => {
     setSelectedRole(role);
@@ -224,10 +227,11 @@ const LandingPage: React.FC = () => {
         </div>
       </footer>
 
-      <AuthModal 
+      <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         selectedRole={selectedRole}
+        redirectTo={redirectTo}
       />
     </div>
   );

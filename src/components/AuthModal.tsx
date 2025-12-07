@@ -8,9 +8,10 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedRole: string;
+  redirectTo?: string;
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) => {
+const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, redirectTo }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -30,16 +31,17 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
   });
   const { login, register } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   if (!isOpen) return null;
 
   const getRedirectPath = () => {
-    const from = (location.state as any)?.from;
-    if (from && from !== '/') {
-      return from;
+    if (redirectTo && redirectTo !== '/') {
+      console.log('[AuthModal] Using provided redirectTo:', redirectTo);
+      return redirectTo;
     }
-    return getRoleDashboardRoute(selectedRole as any);
+    const dashboardRoute = getRoleDashboardRoute(selectedRole as any);
+    console.log('[AuthModal] Using default dashboard route:', dashboardRoute);
+    return dashboardRoute;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,12 +82,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) 
         if (result.success) {
           setSuccess(true);
           const redirectPath = getRedirectPath();
-          console.log('[AuthModal] Login successful, navigating to:', redirectPath);
+          console.log('[AuthModal] Login successful, will navigate to:', redirectPath);
+
+          onClose();
 
           setTimeout(() => {
-            onClose();
+            console.log('[AuthModal] Executing navigation to:', redirectPath);
             navigate(redirectPath, { replace: true });
-          }, 500);
+          }, 100);
         } else {
           console.error('[AuthModal] Login failed:', result.error);
           setError(result.error || { message: 'Login failed' });
