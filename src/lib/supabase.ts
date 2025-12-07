@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://kwlommrclqhpvthqxcge.supabase.co';
-const supabaseKey = 'sb_publishable_MvxfTrIGw_nLPpfnQZvsDg_Jk5Yp_js';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kwlommrclqhpvthqxcge.supabase.co';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-console.log('[Supabase] Initializing with provided sb_publishable key...');
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables. Check your .env file.');
+}
+
+console.log('[Supabase] Initializing with environment variables...');
 console.log('[Supabase] Configuration:', {
   url: supabaseUrl,
   hasUrl: !!supabaseUrl,
@@ -19,8 +23,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: window.localStorage,
-    storageKey: 'telemedicine-auth',
-    flowType: 'implicit'
+    storageKey: 'telemedicine-auth'
   },
   realtime: {
     params: {
@@ -37,7 +40,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   }
 });
 
-console.log('[Supabase] Client initialized successfully with sb_publishable key');
+console.log('[Supabase] Client initialized successfully');
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();

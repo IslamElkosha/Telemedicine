@@ -123,11 +123,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     let mounted = true;
+    let authSubscription: any = null;
 
     const initializeAuth = async () => {
       try {
         console.log('[AuthContext] Initializing auth...');
-        console.log('[AuthContext] Checking localStorage for session:', localStorage.getItem('telemedicine-auth'));
+        console.log('[AuthContext] Checking localStorage for session:', !!localStorage.getItem('telemedicine-auth'));
 
         const { data: { session }, error } = await supabase.auth.getSession();
 
@@ -136,21 +137,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           hasUser: !!session?.user,
           userId: session?.user?.id,
           userEmail: session?.user?.email,
+          accessToken: session?.access_token ? session.access_token.substring(0, 20) + '...' : null,
+          expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
           error: error?.message
         });
 
-        if (mounted) {
-          if (session?.user) {
-            console.log('[AuthContext] Session found, loading profile for:', session.user.id);
-            await loadUserProfile(session.user.id);
-          } else {
-            console.log('[AuthContext] No session found, user needs to login');
-            setLoading(false);
-          }
+        if (!mounted) return;
+
+        if (session?.user) {
+          console.log('[AuthContext] Session found, loading profile for:', session.user.id);
+          await loadUserProfile(session.user.id);
+        } else {
+          console.log('[AuthContext] No session found, user needs to login');
+          setUser(null);
+          setLoading(false);
         }
       } catch (error) {
         console.error('[AuthContext] Error initializing auth:', error);
         if (mounted) {
+          setUser(null);
           setLoading(false);
         }
       }
@@ -159,23 +164,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AuthContext] Auth state changed:', event);
-      if (mounted) {
-        if (session?.user) {
-          console.log('[AuthContext] Session exists, loading profile');
+      console.log('[AuthContext] Auth state changed:', event, {
+        hasSession: !!session,
+        userId: session?.user?.id
+      });
+
+      if (!mounted) return;
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('[AuthContext] User signed in, loading profile');
+        await loadUserProfile(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        console.log('[AuthContext] User signed out, clearing state');
+        setUser(null);
+        setLoading(false);
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        console.log('[AuthContext] Token refreshed, ensuring profile is loaded');
+        if (!user || user.id !== session.user.id) {
           await loadUserProfile(session.user.id);
-        } else {
-          console.log('[AuthContext] No session, clearing user');
-          setUser(null);
-          setLoading(false);
         }
+      } else if (!session) {
+        console.log('[AuthContext] No session in auth state change, clearing user');
+        setUser(null);
+        setLoading(false);
       }
     });
+
+    authSubscription = subscription;
 
     return () => {
       console.log('[AuthContext] Cleaning up subscriptions');
       mounted = false;
-      subscription.unsubscribe();
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
     };
   }, []);
 
