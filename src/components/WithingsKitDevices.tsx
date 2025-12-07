@@ -61,11 +61,12 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
         .single();
 
       if (tokenData) {
-        const currentTime = Math.floor(Date.now() / 1000);
-        const tokenValidForSeconds = tokenData.token_expiry_timestamp - currentTime;
+        const expiresAt = new Date(tokenData.expires_at).getTime();
+        const currentTime = Date.now();
+        const tokenValidForMs = expiresAt - currentTime;
 
-        if (tokenValidForSeconds < 0) {
-          console.warn('Token expired! Seconds since expiry:', Math.abs(tokenValidForSeconds));
+        if (tokenValidForMs < 0) {
+          console.warn('Token expired! Time since expiry:', Math.abs(tokenValidForMs) / 1000, 'seconds');
           setHasConnection(false);
           setDevices(prev => prev.map(d => ({ ...d, connectionStatus: 'Disconnected' })));
 
@@ -130,15 +131,21 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const handleLinkDevice = async () => {
     try {
+      console.log('[WithingsKitDevices] Getting fresh session for device linking...');
       const { data: { session } } = await supabase.auth.getSession();
+
       if (!session) {
+        console.error('[WithingsKitDevices] No active session found');
         alert('Please log in to connect Withings devices');
         return;
       }
 
+      console.log('[WithingsKitDevices] Session obtained, user ID:', session.user.id);
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-      console.log('Initiating force relink to clear any expired tokens...');
+      console.log('[WithingsKitDevices] Initiating force relink to clear any expired tokens...');
+      console.log('[WithingsKitDevices] Using Authorization header with token');
+
       const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
         method: 'POST',
         headers: {
@@ -147,16 +154,42 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
         },
       });
 
+      console.log('[WithingsKitDevices] Response status:', response.status);
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to generate authorization URL';
+
+        try {
+          const result = await response.json();
+          errorMessage = result.error || errorMessage;
+
+          if (response.status === 401) {
+            console.error('[WithingsKitDevices] 401 Unauthorized - Session may be invalid');
+            errorMessage = 'Authentication failed. Please try logging out and back in.';
+          } else if (response.status === 406) {
+            console.error('[WithingsKitDevices] 406 Not Acceptable - Database access issue');
+            errorMessage = 'Database permission error. Please contact support.';
+          }
+
+          console.error('[WithingsKitDevices] Error details:', result);
+        } catch (parseError) {
+          console.error('[WithingsKitDevices] Could not parse error response');
+        }
+
+        throw new Error(errorMessage);
+      }
+
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
+      if (!result.success) {
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
-      console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
+      console.log('[WithingsKitDevices] Force relink successful. Tokens deleted:', result.tokensDeleted);
+      console.log('[WithingsKitDevices] Redirecting to Withings authorization...');
       window.location.href = result.authUrl;
     } catch (error: any) {
-      console.error('Error linking device:', error);
+      console.error('[WithingsKitDevices] Error linking device:', error);
       alert(`Failed to link device: ${error.message}`);
     }
   };
