@@ -212,7 +212,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} method="post" action="#" className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
