@@ -51,17 +51,16 @@ async function refreshWithingsToken(supabase: any, userId: string, refreshToken:
     const newAccessToken = data.body.access_token;
     const newRefreshToken = data.body.refresh_token;
     const expiresIn = data.body.expires_in;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
     console.log('Token refreshed successfully. Updating database...');
-
-    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
 
     const { error: updateError } = await supabase
       .from('withings_tokens')
       .update({
         access_token: newAccessToken,
         refresh_token: newRefreshToken,
-        token_expiry_timestamp: expiryTimestamp,
+        expires_at: expiresAt,
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId);
@@ -110,12 +109,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     console.log('=== FETCH LATEST BP READING START ===');
-
+    
     const authHeader = req.headers.get('Authorization');
-    console.log('[Edge Function] Authorization header present:', !!authHeader);
-
     if (!authHeader) {
-      console.error('[Edge Function] Missing authorization header');
+      console.error('Missing authorization header');
       return new Response(
         JSON.stringify({
           connectionStatus: 'Disconnected',
@@ -125,30 +122,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('[Edge Function] Auth header value (first 20 chars):', authHeader.slice(0, 20) + '...');
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log('[Edge Function] Creating user context client (forwarding auth header)...');
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: authHeader
-        }
-      }
-    });
-
-    console.log('[Edge Function] Creating service role client (for writes that bypass RLS)...');
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    console.log('[Edge Function] Verifying user identity...');
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.error('[Edge Function] User authentication failed:', authError?.message);
+      console.error('User authentication failed:', authError);
       return new Response(
         JSON.stringify({
           connectionStatus: 'Disconnected',
@@ -158,17 +140,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('[Edge Function] Authenticated user:', user.id);
+    console.log('Authenticated user:', user.id);
 
-    console.log('[Edge Function] Reading withings_tokens with user context (RLS enforced)...');
-    const { data: tokenData, error: tokenError } = await supabaseUser
+    const { data: tokenData, error: tokenError } = await supabase
       .from('withings_tokens')
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle();
 
     if (tokenError || !tokenData) {
-      console.error('[Edge Function] No Withings token found for user:', user.id, tokenError?.message);
+      console.error('No Withings token found for user:', user.id, tokenError);
       return new Response(
         JSON.stringify({
           connectionStatus: 'Disconnected',
@@ -179,26 +160,26 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('[Edge Function] Withings token found. Token expiry timestamp:', tokenData.token_expiry_timestamp);
+    console.log('Withings token found. Access token expires at:', tokenData.expires_at);
 
-    const nowTimestamp = Math.floor(Date.now() / 1000);
-    const expiryTimestamp = tokenData.token_expiry_timestamp || 0;
-    const isExpired = nowTimestamp >= expiryTimestamp;
-    const willExpireSoon = (expiryTimestamp - nowTimestamp) < (5 * 60);
+    const now = new Date();
+    const expiresAt = new Date(tokenData.expires_at);
+    const isExpired = now >= expiresAt;
+    const willExpireSoon = (expiresAt.getTime() - now.getTime()) < (5 * 60 * 1000);
 
     let accessToken = tokenData.access_token;
 
     if (isExpired || willExpireSoon) {
-      console.log('[Edge Function] Access token expired or expiring soon. Refreshing...');
+      console.log('Access token expired or expiring soon. Refreshing...');
       const newAccessToken = await refreshWithingsToken(
-        supabaseAdmin,
+        supabase,
         user.id,
         tokenData.refresh_token
       );
 
       if (!newAccessToken) {
-        console.error('[Edge Function] Token refresh failed. Deleting tokens.');
-        await supabaseAdmin
+        console.error('Token refresh failed. Deleting tokens.');
+        await supabase
           .from('withings_tokens')
           .delete()
           .eq('user_id', user.id);
@@ -250,14 +231,14 @@ Deno.serve(async (req: Request) => {
 
       if (measureData.status === 401 || measureData.status === 503) {
         if (measureData.status === 401) {
-          console.error('[Edge Function] Invalid or expired access token (401). Deleting tokens and requiring reconnection.');
+          console.error('Invalid or expired access token (401). Deleting tokens and requiring reconnection.');
 
-          await supabaseAdmin
+          await supabase
             .from('withings_tokens')
             .delete()
             .eq('user_id', user.id);
 
-          console.log('[Edge Function] Tokens deleted. User must reconnect via OAuth.');
+          console.log('Tokens deleted. User must reconnect via OAuth.');
 
           return new Response(
             JSON.stringify({
@@ -404,19 +385,19 @@ Deno.serve(async (req: Request) => {
       withings_measure_id: `${latestGroup.grpid}`,
     };
 
-    console.log('[Edge Function] Saving to withings_measurements table (using service role to bypass RLS)...');
-    const { error: dbError } = await supabaseAdmin
+    console.log('Saving to withings_measurements table...');
+    const { error: dbError } = await supabase
       .from('withings_measurements')
       .upsert(dbRecord, { onConflict: 'withings_measure_id', ignoreDuplicates: true });
 
     if (dbError) {
-      console.error('[Edge Function] Database save error:', dbError.message);
+      console.error('Database save error:', dbError);
     } else {
-      console.log('[Edge Function] Measurement saved to database successfully');
+      console.log('Measurement saved to database successfully');
     }
 
-    console.log('[Edge Function] Updating user_vitals_live table (using service role to bypass RLS)...');
-    const { error: liveError } = await supabaseAdmin
+    console.log('Updating user_vitals_live table...');
+    const { error: liveError } = await supabase
       .from('user_vitals_live')
       .upsert({
         user_id: user.id,
@@ -427,9 +408,9 @@ Deno.serve(async (req: Request) => {
       }, { onConflict: 'user_id' });
 
     if (liveError) {
-      console.error('[Edge Function] Error updating user_vitals_live:', liveError.message);
+      console.error('Error updating user_vitals_live:', liveError);
     } else {
-      console.log('[Edge Function] user_vitals_live updated successfully');
+      console.log('user_vitals_live updated successfully');
     }
 
     console.log('=== FETCH LATEST BP READING END - SUCCESS ===');
