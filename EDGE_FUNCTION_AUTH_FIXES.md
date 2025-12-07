@@ -306,6 +306,36 @@ catch (error: any) {
 
 ---
 
+## Database RLS Policy Fix ✅
+
+### Problem
+The `withings_tokens` table had an RLS policy that wasn't properly matching authenticated users, causing 406 errors even after the edge function fixes.
+
+### Solution
+Applied a strict UUID-based RLS policy:
+
+```sql
+-- Ensure RLS is enabled
+ALTER TABLE withings_tokens ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing failing policies
+DROP POLICY IF EXISTS "Users can manage their own tokens" ON withings_tokens;
+
+-- Create a strict UUID-based policy
+CREATE POLICY "Users can manage their own tokens"
+ON withings_tokens
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+```
+
+### Why This Works
+- `auth.uid()` now correctly identifies the authenticated user from the edge function
+- The edge functions pass the Authorization header to the Supabase client
+- The RLS policy can now match `user_id = auth.uid()` successfully
+- Both SELECT and INSERT/UPDATE/DELETE operations are properly authorized
+
+---
+
 ## Testing Recommendations
 
 ### 1. Test Authentication Flow
