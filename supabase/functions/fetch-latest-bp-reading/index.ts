@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.46.1';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 interface BPReading {
   systolic?: number;
@@ -12,10 +12,7 @@ interface BPReading {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma',
-  'Cache-Control': 'no-cache, no-store, must-revalidate',
-  'Pragma': 'no-cache',
-  'Expires': '0',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 async function refreshWithingsToken(supabase: any, userId: string, refreshToken: string) {
@@ -104,7 +101,7 @@ async function callWithingsAPI(
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
@@ -113,31 +110,14 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('Missing authorization header');
-      return new Response(
-        JSON.stringify({
-          connectionStatus: 'Disconnected',
-          error: 'Missing authorization header'
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error('Missing Authorization header');
     }
 
-    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!jwt) {
-      console.error('Missing Bearer token');
-      return new Response(
-        JSON.stringify({
-          connectionStatus: 'Disconnected',
-          error: 'Missing Bearer token'
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
+      global: { headers: { Authorization: authHeader } },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -145,19 +125,12 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
-      console.error('User authentication failed:', authError);
-      return new Response(
-        JSON.stringify({
-          connectionStatus: 'Disconnected',
-          error: 'Invalid JWT'
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('User authentication failed:', userError);
+      throw new Error('Invalid token');
     }
 
-    const user = userData.user;
     console.log('Authenticated user:', user.id);
 
     const { data: tokenData, error: tokenError } = await supabase
@@ -451,16 +424,20 @@ Deno.serve(async (req: Request) => {
 
   } catch (error: any) {
     console.error('=== CRITICAL ERROR IN FETCH BP READING ===');
-    console.error('Error name:', error.name);
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
+
+    const statusCode = error.message.includes('Authorization') || error.message.includes('token') ? 401 : 500;
+
     return new Response(
       JSON.stringify({
         connectionStatus: 'Disconnected',
-        error: error.message || 'Internal server error',
-        details: error.toString()
+        error: error.message || 'Internal server error'
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: statusCode,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
     );
   }
 });

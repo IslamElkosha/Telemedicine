@@ -1,9 +1,9 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.46.1';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
@@ -11,7 +11,7 @@ const WITHINGS_AUTH_URL = 'https://account.withings.com/oauth2_user/authorize2';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
@@ -19,25 +19,15 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.error('Missing authorization header');
+      throw new Error('Missing Authorization header');
     }
 
-    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!jwt) {
-      return new Response(
-        JSON.stringify({ error: 'Missing Bearer token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
+      global: { headers: { Authorization: authHeader } },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -45,16 +35,12 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
-      console.error('Authentication failed:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid JWT' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('Authentication failed:', userError);
+      throw new Error('Invalid token');
     }
 
-    const user = userData.user;
     console.log('User authenticated:', user.id);
 
     console.log('Step 1: Deleting expired/invalid tokens from database');
@@ -66,10 +52,7 @@ Deno.serve(async (req: Request) => {
 
     if (deleteError) {
       console.error('Error deleting tokens:', deleteError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to delete tokens', details: deleteError.message }),
-        { status: 406, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error(`Failed to delete tokens: ${deleteError.message}`);
     }
 
     console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
@@ -100,14 +83,20 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error: any) {
-    console.error('Error in force relink:', error);
+    console.error('=== ERROR IN FORCE RELINK ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+
+    const statusCode = error.message.includes('Authorization') || error.message.includes('token') ? 401 : 500;
+
     return new Response(
       JSON.stringify({
-        error: 'Internal server error',
-        message: error.message,
-        stack: error.stack
+        error: error.message || 'Internal server error'
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: statusCode,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
     );
   }
 });
