@@ -553,9 +553,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       console.log('[AuthContext] ✓ Authentication successful for user:', authData.user.id);
 
+      console.log('[AuthContext] 🔄 Refreshing session to avoid race conditions...');
+      await supabase.auth.refreshSession();
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error('[AuthContext] ❌ Login succeeded but no session available');
+        return {
+          success: false,
+          error: { message: 'Login succeeded but session could not be established. Please try again.' }
+        };
+      }
+
+      console.log('[AuthContext] ✓ Session confirmed:', {
+        userId: session.user.id,
+        expiresAt: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null
+      });
+
       let sessionVerified = false;
       for (let attempt = 0; attempt < 5; attempt++) {
-        const { data: { session } } = await supabase.auth.getSession();
         const storageData = localStorage.getItem('telemedicine-auth');
 
         if (session?.access_token && storageData) {
@@ -577,7 +593,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      console.log('[AuthContext] 📦 Loading user profile...');
+      console.log('[AuthContext] 📦 Fetching user role from database...');
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (userError) {
+        console.error('[AuthContext] ❌ Failed to fetch user role:', userError);
+        return {
+          success: false,
+          error: { message: 'Failed to fetch user data. Please try again.' }
+        };
+      }
+
+      if (!userData) {
+        console.error('[AuthContext] ❌ No user record found in database');
+        return {
+          success: false,
+          error: { message: 'User account not found. Please contact support.' }
+        };
+      }
+
+      console.log('[AuthContext] ✓ User role confirmed:', userData.role);
+
+      console.log('[AuthContext] 📦 Loading full user profile...');
       await loadUserProfile(authData.user.id);
 
       const totalTime = Date.now() - startTime;

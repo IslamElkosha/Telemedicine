@@ -35,11 +35,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
 
   useEffect(() => {
     if (waitingForUserLoad && !loading && user?.id) {
-      console.log('[AuthModal] ✓ User loaded, closing modal');
+      console.log('[AuthModal] ✓ User loaded, navigating to dashboard');
       setWaitingForUserLoad(false);
+
+      const redirectPath = getRedirectPath();
+      console.log('[AuthModal] Navigating to:', redirectPath);
+
       onClose();
+      navigate(redirectPath, { replace: true });
     }
-  }, [waitingForUserLoad, loading, user?.id, onClose]);
+  }, [waitingForUserLoad, loading, user?.id, onClose, navigate]);
 
   if (!isOpen) return null;
 
