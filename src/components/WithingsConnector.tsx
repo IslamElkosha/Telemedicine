@@ -72,11 +72,16 @@ const WithingsConnector: React.FC = () => {
         return;
       }
 
-      const { data: tokenData, error } = await supabase
+      const { data: tokenData, error, status: statusCode } = await supabase
         .from('withings_tokens')
         .select('*')
         .eq('user_id', session.user.id)
         .single();
+
+      if (statusCode === 406 || statusCode === 403) {
+        setStatus({ connected: false });
+        return;
+      }
 
       if (error || !tokenData) {
         setStatus({ connected: false });

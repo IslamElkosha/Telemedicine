@@ -54,11 +54,17 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
         return;
       }
 
-      const { data: tokenData } = await supabase
+      const { data: tokenData, status: statusCode } = await supabase
         .from('withings_tokens')
         .select('*')
         .eq('user_id', session.user.id)
         .single();
+
+      if (statusCode === 406 || statusCode === 403) {
+        setHasConnection(false);
+        setDevices(prev => prev.map(d => ({ ...d, connectionStatus: 'Disconnected' })));
+        return;
+      }
 
       if (tokenData) {
         const currentTime = Math.floor(Date.now() / 1000);
