@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Heart, Thermometer, Droplet, Link as LinkIcon, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { edgeFunctions } from '../lib/edgeFunctions';
 
 interface WithingsStatus {
   connected: boolean;
@@ -130,34 +131,22 @@ const WithingsConnector: React.FC = () => {
   const handleConnect = async () => {
     try {
       setError(null);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Please log in to connect Withings devices');
-        return;
-      }
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      setLoading(true);
 
       console.log('Initiating force relink to clear any expired tokens...');
-      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const result = await edgeFunctions.forceWithingsRelink();
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
+      if (!result.success) {
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
       console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
+      console.log('Redirecting to Withings authorization page...');
       window.location.href = result.authUrl;
     } catch (err: any) {
       console.error('Error initiating OAuth:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to connect to Withings. Please try again.');
+      setLoading(false);
     }
   };
 
@@ -166,52 +155,24 @@ const WithingsConnector: React.FC = () => {
       setSyncing(true);
       setError(null);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Please log in to sync measurements');
-        return;
-      }
+      console.log('Syncing measurements from Withings...');
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        if (result.needsRefresh) {
-          const refreshResponse = await fetch(`${supabaseUrl}/functions/v1/withings-refresh-token`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-          });
-
-          if (refreshResponse.ok) {
-            const retryResponse = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
-              headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-              },
-            });
-            const retryResult = await retryResponse.json();
-
-            if (retryResponse.ok) {
-              await checkConnection();
-              return;
-            }
-          }
+      try {
+        await edgeFunctions.withingsFetchMeasurements();
+        await checkConnection();
+      } catch (err: any) {
+        if (err.message?.includes('token') || err.message?.includes('expired')) {
+          console.log('Token expired, attempting refresh...');
+          await edgeFunctions.withingsRefreshToken();
+          await edgeFunctions.withingsFetchMeasurements();
+          await checkConnection();
+        } else {
+          throw err;
         }
-        throw new Error(result.error || 'Failed to sync measurements');
       }
-
-      await checkConnection();
     } catch (err: any) {
       console.error('Error syncing measurements:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to sync measurements. Please try again.');
     } finally {
       setSyncing(false);
     }
