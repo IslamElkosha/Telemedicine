@@ -41,6 +41,7 @@ Deno.serve(async (req: Request) => {
       throw new Error('Invalid token');
     }
 
+    // user.id is already a string UUID - no casting needed
     const { data: tokenData, error: tokenError } = await supabase
       .from('withings_tokens')
       .select('*')

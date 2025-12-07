@@ -40,6 +40,7 @@ Deno.serve(async (req: Request) => {
       return Response.redirect(redirectUrl, 302);
     }
 
+    // userId is a string UUID from the OAuth state parameter - no casting needed
     const userId = state;
     if (!userId) {
       console.error('Missing state parameter (user_id)');
@@ -144,6 +145,7 @@ Deno.serve(async (req: Request) => {
     const expiresIn = tokenData.body.expires_in || 10800;
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
+    // userId is already a string UUID - database column is uuid type
     const tokenRecord = {
       user_id: userId,
       withings_user_id: tokenData.body.userid?.toString() || 'unknown',

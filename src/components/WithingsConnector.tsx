@@ -51,6 +51,7 @@ const WithingsConnector: React.FC = () => {
         return;
       }
 
+      // session.user.id is already a string UUID - no casting needed
       const { data: tokenData, error } = await supabase
         .from('withings_tokens')
         .select('*')

@@ -39,8 +39,9 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
-    
+
     const scope = 'user.metrics,user.info';
+    // user.id is already a string UUID - no casting needed
     const state = user.id;
 
     const authUrl = new URL(WITHINGS_AUTH_URL);
