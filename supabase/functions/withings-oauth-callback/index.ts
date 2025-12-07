@@ -9,6 +9,7 @@ const corsHeaders = {
 const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
 const WITHINGS_CLIENT_SECRET = '215903021c01d0fcd509c5013cf48b7f8637f887ca31f930e8bf5f8ec51fd034';
 const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2';
+const REDIRECT_URI = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -41,7 +42,7 @@ Deno.serve(async (req: Request) => {
       client_id: WITHINGS_CLIENT_ID,
       client_secret: WITHINGS_CLIENT_SECRET,
       code: code,
-      redirect_uri: `${url.origin}/withings-oauth-callback`,
+      redirect_uri: REDIRECT_URI,
     });
 
     const tokenResponse = await fetch(WITHINGS_TOKEN_URL, {
