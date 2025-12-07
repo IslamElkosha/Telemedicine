@@ -36,18 +36,18 @@ const WithingsCallbackPage: React.FC = () => {
 
       sessionStorage.removeItem('withings_auth_state');
 
-      const stateData = JSON.parse(atob(state));
-
       const session = await getValidSession(false);
 
-      if (!session || session.user.id !== stateData.uid) {
-        throw new Error('User session mismatch');
+      if (!session) {
+        throw new Error('No valid session found');
       }
 
       setMessage('Exchanging authorization code for access tokens...');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const functionUrl = `${supabaseUrl}/functions/v1/handle-withings-callback`;
+      const functionUrl = `${supabaseUrl}/functions/v1/exchange-withings-token`;
+
+      const redirectUri = `${window.location.origin}/withings-callback`;
 
       const response = await fetch(functionUrl, {
         method: 'POST',
@@ -56,7 +56,11 @@ const WithingsCallbackPage: React.FC = () => {
           'Content-Type': 'application/json',
           'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
-        body: JSON.stringify({ code, state }),
+        body: JSON.stringify({
+          code,
+          userId: session.user.id,
+          redirectUri
+        }),
       });
 
       if (!response.ok) {
