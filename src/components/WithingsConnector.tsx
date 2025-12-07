@@ -76,7 +76,7 @@ const WithingsConnector: React.FC = () => {
         .from('withings_tokens')
         .select('*')
         .eq('user_id', session.user.id)
-        .single();
+        .maybeSingle();
 
       if (statusCode === 406 || statusCode === 403) {
         setStatus({ connected: false });
@@ -173,11 +173,10 @@ const WithingsConnector: React.FC = () => {
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
         headers: {
-          'Authorization': `Bearer ${anonKey}`,
+          'Authorization': `Bearer ${session.access_token}`,
         },
       });
 
@@ -188,14 +187,14 @@ const WithingsConnector: React.FC = () => {
           const refreshResponse = await fetch(`${supabaseUrl}/functions/v1/withings-refresh-token`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${anonKey}`,
+              'Authorization': `Bearer ${session.access_token}`,
             },
           });
 
           if (refreshResponse.ok) {
             const retryResponse = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
               headers: {
-                'Authorization': `Bearer ${anonKey}`,
+                'Authorization': `Bearer ${session.access_token}`,
               },
             });
             const retryResult = await retryResponse.json();
