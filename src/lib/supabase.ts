@@ -23,7 +23,8 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: window.localStorage,
-    storageKey: 'telemedicine-auth'
+    storageKey: 'telemedicine-auth',
+    flowType: 'pkce'
   },
   realtime: {
     params: {
@@ -41,6 +42,20 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 console.log('[Supabase] Client initialized successfully');
+console.log('[Supabase] Auth storage test:', {
+  storageAvailable: typeof window.localStorage !== 'undefined',
+  storageWorking: (() => {
+    try {
+      const testKey = '__storage_test__';
+      window.localStorage.setItem(testKey, 'test');
+      const result = window.localStorage.getItem(testKey) === 'test';
+      window.localStorage.removeItem(testKey);
+      return result;
+    } catch (e) {
+      return false;
+    }
+  })()
+});
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();

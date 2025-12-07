@@ -61,11 +61,25 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+
+    console.log('[AuthModal] ========== FORM SUBMISSION STARTED ==========');
+    console.log('[AuthModal] preventDefault() called - page should NOT reload');
+    console.log('[AuthModal] Current URL:', window.location.href);
+
+    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'Authentication in progress. Are you sure you want to leave?';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+
     setError(null);
     setSuccess(false);
     setSubmitting(true);
 
-    console.log('[AuthModal] Form submission started');
+    console.log('[AuthModal] Form submission initialized');
     console.log('[AuthModal] isLogin:', isLogin);
     console.log('[AuthModal] Form data state:', {
       email: formData.email,
@@ -141,6 +155,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
       console.error('[AuthModal] Unexpected error during form submission:', error);
       setError({ message: error?.message || 'An unexpected error occurred. Please try again.' });
     } finally {
+      window.removeEventListener('beforeunload', beforeUnloadHandler);
+      console.log('[AuthModal] Removed beforeunload handler');
       setSubmitting(false);
     }
   };
@@ -221,7 +237,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} method="post" action="#" className="space-y-4">
           {!isLogin && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

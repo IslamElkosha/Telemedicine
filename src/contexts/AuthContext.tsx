@@ -611,17 +611,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       console.log('[AuthContext] Verifying session immediately after signIn...');
-      const { data: { session: immediateSession } } = await supabase.auth.getSession();
-      console.log('[AuthContext] Immediate session check:', {
-        hasSession: !!immediateSession,
-        hasAccessToken: !!immediateSession?.access_token,
-        userId: immediateSession?.user?.id,
-        storageData: localStorage.getItem('telemedicine-auth')?.substring(0, 50) + '...'
-      });
+
+      let sessionCheckAttempts = 0;
+      let immediateSession = null;
+      const maxAttempts = 5;
+
+      while (sessionCheckAttempts < maxAttempts) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const storageData = localStorage.getItem('telemedicine-auth');
+
+        console.log(`[AuthContext] Session check attempt ${sessionCheckAttempts + 1}/${maxAttempts}:`, {
+          hasSession: !!session,
+          hasAccessToken: !!session?.access_token,
+          userId: session?.user?.id,
+          hasStorageData: !!storageData,
+          storageLength: storageData?.length
+        });
+
+        if (session && session.access_token && storageData) {
+          immediateSession = session;
+          console.log('[AuthContext] ✓ Session verified with storage persistence');
+          break;
+        }
+
+        sessionCheckAttempts++;
+        if (sessionCheckAttempts < maxAttempts) {
+          console.log('[AuthContext] Session not fully persisted yet, waiting 100ms...');
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
 
       if (!immediateSession) {
-        console.error('[AuthContext] CRITICAL: Session not created after signInWithPassword!');
-        return { success: false, error: { message: 'Session creation failed. Please try again.' } };
+        console.error('[AuthContext] CRITICAL: Session not created or persisted after signInWithPassword!');
+        console.error('[AuthContext] This suggests localStorage might be blocked or session creation failed');
+        return { success: false, error: { message: 'Session creation failed. Please check if cookies/storage are enabled.' } };
       }
 
       console.log('[AuthContext] Session verified, loading user profile...');
