@@ -1,9 +1,9 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.46.1';
+import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, cache-control, pragma',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
 const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/v2/measure';
@@ -61,14 +61,14 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
     }
 
     const expiresIn = refreshData.body.expires_in || 10800;
-    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
 
     const { error: updateError } = await supabase
       .from('withings_tokens')
       .update({
         access_token: refreshData.body.access_token,
         refresh_token: refreshData.body.refresh_token,
-        expires_at: expiresAt,
+        token_expiry_timestamp: expiryTimestamp,
       })
       .eq('user_id', userId);
 
@@ -108,18 +108,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!jwt) {
-      return new Response(
-        JSON.stringify({ error: 'Missing Bearer token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -127,21 +118,21 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
       return new Response(
-        JSON.stringify({ error: 'Invalid JWT' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const user = userData.user;
 
     const { data: tokenData, error: tokenError } = await supabase
       .from('withings_tokens')
       .select('*')
       .eq('user_id', user.id)
-      .maybeSingle();
+      .single();
 
     if (tokenError || !tokenData) {
       return new Response(
@@ -151,11 +142,10 @@ Deno.serve(async (req: Request) => {
     }
 
     let accessToken = tokenData.access_token;
-    const now = new Date();
-    const expiresAt = new Date(tokenData.expires_at);
-    const bufferTime = 5 * 60 * 1000;
+    const now = Math.floor(Date.now() / 1000);
+    const bufferTime = 300;
 
-    if (expiresAt.getTime() - now.getTime() <= bufferTime) {
+    if (tokenData.token_expiry_timestamp <= (now + bufferTime)) {
       console.log('Token expired or expiring soon. Attempting to refresh...');
 
       const newAccessToken = await refreshAccessToken(supabase, user.id, tokenData.refresh_token);

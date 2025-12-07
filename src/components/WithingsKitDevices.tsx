@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Thermometer, Link as LinkIcon, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { invokeEdgeFunction } from '../lib/edgeFunctions';
-import { getValidSession } from '../utils/authHelper';
 
 interface DeviceStatus {
   name: string;
@@ -63,12 +61,11 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
         .single();
 
       if (tokenData) {
-        const expiresAt = new Date(tokenData.expires_at).getTime();
-        const currentTime = Date.now();
-        const tokenValidForMs = expiresAt - currentTime;
+        const currentTime = Math.floor(Date.now() / 1000);
+        const tokenValidForSeconds = tokenData.token_expiry_timestamp - currentTime;
 
-        if (tokenValidForMs < 0) {
-          console.warn('Token expired! Time since expiry:', Math.abs(tokenValidForMs) / 1000, 'seconds');
+        if (tokenValidForSeconds < 0) {
+          console.warn('Token expired! Seconds since expiry:', Math.abs(tokenValidForSeconds));
           setHasConnection(false);
           setDevices(prev => prev.map(d => ({ ...d, connectionStatus: 'Disconnected' })));
 
@@ -133,53 +130,54 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const handleLinkDevice = async () => {
     try {
-      console.log('[WithingsKitDevices] Initiating client-side Withings authorization...');
-
-      const session = await getValidSession(false);
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        console.error('[WithingsKitDevices] Auth missing or corrupted. Redirecting to login.');
-        await supabase.auth.signOut();
-        window.location.href = '/';
+        alert('Please log in to connect Withings devices');
         return;
       }
 
-      const nonce = crypto.randomUUID();
-      const state = btoa(JSON.stringify({
-        uid: session.user.id,
-        nonce: nonce
-      }));
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-      sessionStorage.setItem('withings_auth_state', state);
+      console.log('Initiating force relink to clear any expired tokens...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-      const withingsClientId = import.meta.env.VITE_WITHINGS_CLIENT_ID;
+      const result = await response.json();
 
-      if (!withingsClientId) {
-        throw new Error('Withings Client ID is not configured. Please check your environment variables.');
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
-      const authorizeUrl = new URL('https://account.withings.com/oauth2_user/authorize2');
-      authorizeUrl.search = new URLSearchParams({
-        response_type: 'code',
-        client_id: withingsClientId,
-        redirect_uri: `${window.location.origin}/withings-callback`,
-        scope: 'user.metrics,user.activity',
-        state: state,
-      }).toString();
-
-      console.log('[WithingsKitDevices] Redirecting to Withings authorization...');
-      window.location.href = authorizeUrl.toString();
+      console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
+      window.location.href = result.authUrl;
     } catch (error: any) {
-      console.error('[WithingsKitDevices] Error linking device:', error);
+      console.error('Error linking device:', error);
       alert(`Failed to link device: ${error.message}`);
     }
   };
 
   const subscribeToNotifications = async () => {
     try {
-      console.log('Subscribing to Withings notifications...');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-      const result = await invokeEdgeFunction<{ success: boolean; alreadySubscribed?: boolean; message?: string; error?: string }>('subscribe-withings-notify');
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+      console.log('Subscribing to Withings notifications...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/subscribe-withings-notify`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
 
       if (result.success || result.alreadySubscribed) {
         console.log('Webhook notifications enabled:', result.message);

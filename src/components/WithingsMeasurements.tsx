@@ -40,7 +40,6 @@ const WithingsMeasurements: React.FC<WithingsMeasurementsProps> = ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Both userId prop and session.user.id are string UUIDs - no casting needed
       const targetUserId = userId || session.user.id;
 
       let query = supabase

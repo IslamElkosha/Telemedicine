@@ -1,8 +1,9 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
 const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
@@ -10,7 +11,7 @@ const WITHINGS_AUTH_URL = 'https://account.withings.com/oauth2_user/authorize2';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -18,49 +19,37 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      console.error('Missing authorization header');
       return new Response(
-        JSON.stringify({ error: 'Missing Authorization header' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Step 1: Creating User Client for authentication verification');
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
       }
-    );
+    });
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      console.error('Authentication failed:', userError);
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error('Authentication failed:', authError);
       return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log('User authenticated:', user.id);
 
-    console.log('Step 2: Creating Admin Client for database operations');
-    const adminClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
-
-    console.log('Step 3: Deleting expired/invalid tokens from database');
-    const { error: deleteError, data: deletedData } = await adminClient
+    console.log('Step 1: Deleting expired/invalid tokens from database');
+    const { error: deleteError, data: deletedData } = await supabase
       .from('withings_tokens')
       .delete()
       .eq('user_id', user.id)
@@ -68,16 +57,12 @@ Deno.serve(async (req: Request) => {
 
     if (deleteError) {
       console.error('Error deleting tokens:', deleteError);
-      return new Response(
-        JSON.stringify({ error: `Failed to delete tokens: ${deleteError.message}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    } else {
+      console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
     }
 
-    console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
-
     console.log('Step 2: Generating fresh OAuth authorization URL');
-    const redirectUri = `${Deno.env.get('SUPABASE_URL')}/functions/v1/handle-withings-callback`;
+    const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
     const scope = 'user.metrics,user.info';
     const state = user.id;
 
@@ -102,18 +87,14 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error: any) {
-    console.error('=== ERROR IN FORCE RELINK ===');
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-
+    console.error('Error in force relink:', error);
     return new Response(
       JSON.stringify({
-        error: error.message || 'Failed to process relink request'
+        error: 'Internal server error',
+        message: error.message,
+        stack: error.stack
       }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

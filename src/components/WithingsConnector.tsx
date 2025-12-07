@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Heart, Thermometer, Droplet, Link as LinkIcon, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { invokeEdgeFunction } from '../lib/edgeFunctions';
 
 interface WithingsStatus {
   connected: boolean;
@@ -18,6 +17,27 @@ const WithingsConnector: React.FC = () => {
   useEffect(() => {
     checkConnection();
     checkForOAuthErrors();
+
+    const { data: { subscription } } = supabase
+      .channel('withings_tokens_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'withings_tokens'
+      }, (payload) => {
+        console.log('Withings tokens changed:', payload);
+        if (payload.eventType === 'DELETE') {
+          setStatus({ connected: false });
+          setError('Connection lost. Please reconnect your Withings device.');
+        } else {
+          checkConnection();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const checkForOAuthErrors = () => {
@@ -52,7 +72,6 @@ const WithingsConnector: React.FC = () => {
         return;
       }
 
-      // session.user.id is already a string UUID - no casting needed
       const { data: tokenData, error } = await supabase
         .from('withings_tokens')
         .select('*')
@@ -62,6 +81,22 @@ const WithingsConnector: React.FC = () => {
       if (error || !tokenData) {
         setStatus({ connected: false });
       } else {
+        const currentTime = Math.floor(Date.now() / 1000);
+        const tokenValidForSeconds = tokenData.token_expiry_timestamp - currentTime;
+
+        if (tokenValidForSeconds < 0) {
+          console.warn('Token expired! Seconds since expiry:', Math.abs(tokenValidForSeconds));
+          setStatus({ connected: false });
+          setError('Connection expired. Please reconnect your Withings device.');
+
+          await supabase
+            .from('withings_tokens')
+            .delete()
+            .eq('user_id', session.user.id);
+
+          return;
+        }
+
         const { data: measurements } = await supabase
           .from('withings_measurements')
           .select('device_model, measured_at')
@@ -90,13 +125,30 @@ const WithingsConnector: React.FC = () => {
   const handleConnect = async () => {
     try {
       setError(null);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setError('Please log in to connect Withings devices');
+        return;
+      }
 
-      const result = await invokeEdgeFunction<{ success: boolean; authUrl: string; error?: string }>('start-withings-auth');
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-      if (!result.success || !result.authUrl) {
+      console.log('Initiating force relink to clear any expired tokens...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
+      console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
       window.location.href = result.authUrl;
     } catch (err: any) {
       console.error('Error initiating OAuth:', err);
@@ -109,13 +161,50 @@ const WithingsConnector: React.FC = () => {
       setSyncing(true);
       setError(null);
 
-      const result = await invokeEdgeFunction<{ success: boolean; error?: string }>('withings-fetch-measurements');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setError('Please log in to sync measurements');
+        return;
+      }
 
-      if (result.success) {
-        await checkConnection();
-      } else {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
+        headers: {
+          'Authorization': `Bearer ${anonKey}`,
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (result.needsRefresh) {
+          const refreshResponse = await fetch(`${supabaseUrl}/functions/v1/withings-refresh-token`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${anonKey}`,
+            },
+          });
+
+          if (refreshResponse.ok) {
+            const retryResponse = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
+              headers: {
+                'Authorization': `Bearer ${anonKey}`,
+              },
+            });
+            const retryResult = await retryResponse.json();
+
+            if (retryResponse.ok) {
+              await checkConnection();
+              return;
+            }
+          }
+        }
         throw new Error(result.error || 'Failed to sync measurements');
       }
+
+      await checkConnection();
     } catch (err: any) {
       console.error('Error syncing measurements:', err);
       setError(err.message);

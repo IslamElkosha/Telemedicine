@@ -71,7 +71,7 @@ Deno.serve(async (req: Request) => {
     });
 
     const expiresIn = tokenData.body.expires_in;
-    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
 
     const { error: dbError } = await supabase
       .from('withings_tokens')
@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
         withings_user_id: tokenData.body.userid.toString(),
         access_token: tokenData.body.access_token,
         refresh_token: tokenData.body.refresh_token,
-        expires_at: expiresAt,
+        token_expiry_timestamp: expiryTimestamp,
       });
 
     if (dbError) {

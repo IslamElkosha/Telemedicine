@@ -40,7 +40,6 @@ Deno.serve(async (req: Request) => {
       return Response.redirect(redirectUrl, 302);
     }
 
-    // userId is a string UUID from the OAuth state parameter - no casting needed
     const userId = state;
     if (!userId) {
       console.error('Missing state parameter (user_id)');
@@ -143,21 +142,20 @@ Deno.serve(async (req: Request) => {
     });
 
     const expiresIn = tokenData.body.expires_in || 10800;
-    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
 
-    // userId is already a string UUID - database column is uuid type
     const tokenRecord = {
       user_id: userId,
       withings_user_id: tokenData.body.userid?.toString() || 'unknown',
       access_token: tokenData.body.access_token,
       refresh_token: tokenData.body.refresh_token,
-      expires_at: expiresAt,
+      token_expiry_timestamp: expiryTimestamp,
     };
 
     console.log('=== SAVING TO DATABASE ===');
     console.log('User ID:', userId);
     console.log('Withings User ID:', tokenRecord.withings_user_id);
-    console.log('Token Expires At:', expiresAt);
+    console.log('Token Expiry Timestamp:', expiryTimestamp, '(', new Date(expiryTimestamp * 1000).toISOString(), ')');
 
     const { data: insertData, error: dbError } = await supabase
       .from('withings_tokens')
