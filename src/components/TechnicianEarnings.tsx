@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTechnician } from '../contexts/TechnicianContext';
 import BackButton from './BackButton';
-import { 
-  DollarSign, 
-  Calendar, 
-  TrendingUp, 
-  Download, 
+import {
+  DollarSign,
+  Calendar,
+  TrendingUp,
+  Download,
   Eye,
   Filter,
   CreditCard,
@@ -24,18 +24,17 @@ const TechnicianEarnings: React.FC = () => {
     fetchEarnings(selectedPeriod);
   }, [selectedPeriod, fetchEarnings]);
 
-  const generateChartData = () => {
+  const chartData = useMemo(() => {
     if (!earnings) return [];
-    
-    // Generate mock chart data based on period
+
     const data = [];
     const now = new Date();
-    
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date(now);
       let label = '';
-      let earnings = Math.floor(Math.random() * 1000) + 500;
-      
+      let earningsValue = Math.floor(Math.random() * 1000) + 500;
+
       switch (selectedPeriod) {
         case 'daily':
           date.setDate(date.getDate() - i);
@@ -52,21 +51,19 @@ const TechnicianEarnings: React.FC = () => {
         case 'yearly':
           date.setFullYear(date.getFullYear() - i);
           label = date.getFullYear().toString();
-          earnings = Math.floor(Math.random() * 10000) + 5000;
+          earningsValue = Math.floor(Math.random() * 10000) + 5000;
           break;
       }
-      
+
       data.push({
         period: label,
-        earnings,
-        visits: Math.floor(earnings / 225) // 225 LE per visit
+        earnings: earningsValue,
+        visits: Math.floor(earningsValue / 225)
       });
     }
-    
-    return data;
-  };
 
-  const chartData = generateChartData();
+    return data;
+  }, [earnings, selectedPeriod]);
 
   const exportEarningsReport = () => {
     if (!earnings) return;
@@ -234,12 +231,12 @@ const TechnicianEarnings: React.FC = () => {
         </div>
         
         <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" debounce={200}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="period" />
               <YAxis />
-              <Tooltip 
+              <Tooltip
                 formatter={(value: any, name: string) => [
                   `${value} ${name === 'earnings' ? 'LE' : 'visits'}`,
                   name === 'earnings' ? 'Earnings' : 'Visits'
