@@ -12,7 +12,7 @@ interface BPReading {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, cache-control, pragma',
 };
 
 async function refreshWithingsToken(supabase: any, userId: string, refreshToken: string) {
