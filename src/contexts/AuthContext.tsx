@@ -525,9 +525,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userRole = userData ? reverseRoleMapping[userData.role] : null;
 
       if (userRole !== role) {
-        console.log('[AuthContext] Role mismatch, signing out');
-        await supabase.auth.signOut();
-        return { success: false, error: { message: `This account is not registered as a ${role}` } };
+        console.log('[AuthContext] Role mismatch detected:', {
+          selectedRole: role,
+          databaseRole: userRole,
+          action: 'Using database role and will redirect to correct dashboard'
+        });
+      } else {
+        console.log('[AuthContext] Role matches, proceeding with login');
       }
 
       console.log('[AuthContext] Loading user profile...');
