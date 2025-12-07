@@ -136,15 +136,33 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const handleLinkDevice = async () => {
     try {
+      console.log('=== WITHINGS DEVICE LINKING STARTED ===');
+
+      const clientId = import.meta.env.VITE_WITHINGS_CLIENT_ID;
+      console.log('[LinkDevice] Checking Client ID:', clientId ? 'Found' : 'MISSING');
+
+      if (!clientId) {
+        console.error('Critical Error: VITE_WITHINGS_CLIENT_ID is missing in .env');
+        alert('Configuration Error: Missing Withings Client ID. Please check your environment configuration.');
+        return;
+      }
+
+      console.log('[LinkDevice] Client ID (first 20 chars):', clientId.substring(0, 20) + '...');
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.error('[LinkDevice] No active session found');
         alert('Please log in to connect Withings devices');
         return;
       }
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      console.log('[LinkDevice] Session verified for user:', session.user.id);
+      console.log('[LinkDevice] Access token (first 30 chars):', session.access_token.substring(0, 30) + '...');
 
-      console.log('Initiating force relink to clear any expired tokens...');
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      console.log('[LinkDevice] Supabase URL:', supabaseUrl);
+
+      console.log('[LinkDevice] Initiating force relink to clear any expired tokens...');
       const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
         method: 'POST',
         headers: {
@@ -153,16 +171,25 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
         },
       });
 
+      console.log('[LinkDevice] Response status:', response.status, response.statusText);
+
       const result = await response.json();
+      console.log('[LinkDevice] Response body:', result);
 
       if (!response.ok || !result.success) {
+        console.error('[LinkDevice] Edge function failed:', result);
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
-      console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
+      console.log('[LinkDevice] Force relink successful. Tokens deleted:', result.tokensDeleted);
+      console.log('[LinkDevice] Authorization URL generated:', result.authUrl);
+      console.log('[LinkDevice] Redirecting to Withings...');
       window.location.href = result.authUrl;
     } catch (error: any) {
-      console.error('Error linking device:', error);
+      console.error('=== WITHINGS DEVICE LINKING FAILED ===');
+      console.error('[LinkDevice] Error:', error);
+      console.error('[LinkDevice] Error message:', error.message);
+      console.error('[LinkDevice] Error stack:', error.stack);
       alert(`Failed to link device: ${error.message}`);
     }
   };

@@ -130,21 +130,40 @@ const WithingsConnector: React.FC = () => {
 
   const handleConnect = async () => {
     try {
+      console.log('=== WITHINGS CONNECTION STARTED ===');
       setError(null);
       setLoading(true);
 
-      console.log('Initiating force relink to clear any expired tokens...');
+      const clientId = import.meta.env.VITE_WITHINGS_CLIENT_ID;
+      console.log('[WithingsConnect] Checking Client ID:', clientId ? 'Found' : 'MISSING');
+
+      if (!clientId) {
+        console.error('Critical Error: VITE_WITHINGS_CLIENT_ID is missing in .env');
+        setError('Configuration Error: Missing Withings Client ID. Please check your environment configuration.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('[WithingsConnect] Client ID (first 20 chars):', clientId.substring(0, 20) + '...');
+      console.log('[WithingsConnect] Initiating force relink to clear any expired tokens...');
+
       const result = await edgeFunctions.forceWithingsRelink();
+      console.log('[WithingsConnect] Edge function result:', result);
 
       if (!result.success) {
+        console.error('[WithingsConnect] Edge function failed:', result);
         throw new Error(result.error || 'Failed to generate authorization URL');
       }
 
-      console.log('Force relink successful. Tokens deleted:', result.tokensDeleted);
-      console.log('Redirecting to Withings authorization page...');
+      console.log('[WithingsConnect] Force relink successful. Tokens deleted:', result.tokensDeleted);
+      console.log('[WithingsConnect] Authorization URL:', result.authUrl);
+      console.log('[WithingsConnect] Redirecting to Withings authorization page...');
       window.location.href = result.authUrl;
     } catch (err: any) {
-      console.error('Error initiating OAuth:', err);
+      console.error('=== WITHINGS CONNECTION FAILED ===');
+      console.error('[WithingsConnect] Error:', err);
+      console.error('[WithingsConnect] Error message:', err.message);
+      console.error('[WithingsConnect] Error stack:', err.stack);
       setError(err.message || 'Failed to connect to Withings. Please try again.');
       setLoading(false);
     }
