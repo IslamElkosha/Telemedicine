@@ -136,72 +136,43 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const handleLinkDevice = async () => {
     try {
-      console.log('=== WITHINGS DEVICE LINKING STARTED ===');
-
-      const clientId = import.meta.env.VITE_WITHINGS_CLIENT_ID;
-      console.log('[LinkDevice] Checking Client ID:', clientId ? 'Found' : 'MISSING');
-
-      if (!clientId) {
-        console.error('Critical Error: VITE_WITHINGS_CLIENT_ID is missing in .env');
-        alert('Configuration Error: Missing Withings Client ID. Please check your environment configuration.');
-        return;
-      }
-
-      console.log('[LinkDevice] Client ID (first 20 chars):', clientId.substring(0, 20) + '...');
-
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        console.error('[LinkDevice] No active session found');
-        alert('Please log in to connect Withings devices');
+        alert('Please log in first.');
         return;
       }
 
-      console.log('[LinkDevice] Session verified for user:', session.user.id);
-      console.log('[LinkDevice] Access token (first 30 chars):', session.access_token.substring(0, 30) + '...');
+      const CLIENT_ID = import.meta.env.VITE_WITHINGS_CLIENT_ID;
+      const REDIRECT_URI = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const REDIRECT_URI = import.meta.env.VITE_WITHINGS_REDIRECT_URI;
-
-      console.log('[LinkDevice] Supabase URL:', supabaseUrl);
-      console.log('[LinkDevice] Redirect URI (from .env):', REDIRECT_URI);
-
-      console.log('[LinkDevice] Initiating force relink to clear any expired tokens...');
-      const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          redirectUri: REDIRECT_URI
-        }),
-      });
-
-      console.log('[LinkDevice] Response status:', response.status, response.statusText);
-
-      const result = await response.json();
-      console.log('[LinkDevice] Response body:', result);
-
-      if (!response.ok || !result.success) {
-        console.error('[LinkDevice] Edge function failed:', result);
-        throw new Error(result.error || 'Failed to generate authorization URL');
+      if (!CLIENT_ID) {
+        throw new Error('Missing VITE_WITHINGS_CLIENT_ID in .env file');
       }
 
-      if (result.state) {
-        sessionStorage.setItem('withings_auth_state', result.state);
-        console.log('[LinkDevice] State saved to sessionStorage');
-      }
+      const stateObj = {
+        uid: session.user.id,
+        nonce: crypto.randomUUID()
+      };
+      const state = btoa(JSON.stringify(stateObj));
 
-      console.log('[LinkDevice] Force relink successful. Tokens deleted:', result.tokensDeleted);
-      console.log('[LinkDevice] Authorization URL generated:', result.authUrl);
-      console.log('[LinkDevice] Redirecting to Withings...');
-      window.location.href = result.authUrl;
+      sessionStorage.setItem('withings_auth_state', state);
+
+      const authorizeUrl = new URL('https://account.withings.com/oauth2_user/authorize2');
+      authorizeUrl.search = new URLSearchParams({
+        response_type: 'code',
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        scope: 'user.metrics,user.activity',
+        state: state,
+      }).toString();
+
+      console.log('Redirecting to:', authorizeUrl.toString());
+
+      window.location.href = authorizeUrl.toString();
+
     } catch (error: any) {
-      console.error('=== WITHINGS DEVICE LINKING FAILED ===');
-      console.error('[LinkDevice] Error:', error);
-      console.error('[LinkDevice] Error message:', error.message);
-      console.error('[LinkDevice] Error stack:', error.stack);
-      alert(`Failed to link device: ${error.message}`);
+      console.error('Link Error:', error);
+      alert('Failed to link: ' + error.message);
     }
   };
 
