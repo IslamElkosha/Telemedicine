@@ -11,8 +11,7 @@ interface BPReading {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, cache-control, pragma',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 async function refreshWithingsToken(supabase: any, userId: string, refreshToken: string) {
@@ -113,22 +112,20 @@ Deno.serve(async (req: Request) => {
       throw new Error('Missing Authorization header');
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
       }
-    });
+    );
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       console.error('User authentication failed:', userError);
-      throw new Error('Invalid token');
+      throw new Error('Invalid or Expired Token');
     }
 
     console.log('Authenticated user:', user.id);
@@ -427,15 +424,13 @@ Deno.serve(async (req: Request) => {
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
 
-    const statusCode = error.message.includes('Authorization') || error.message.includes('token') ? 401 : 500;
-
     return new Response(
       JSON.stringify({
-        connectionStatus: 'Disconnected',
-        error: error.message || 'Internal server error'
+        error: error.message || 'Internal server error',
+        connectionStatus: 'Disconnected'
       }),
       {
-        status: statusCode,
+        status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );

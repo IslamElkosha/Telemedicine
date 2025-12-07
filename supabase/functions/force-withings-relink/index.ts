@@ -2,8 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, cache-control, pragma',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
@@ -23,22 +22,20 @@ Deno.serve(async (req: Request) => {
       throw new Error('Missing Authorization header');
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
       }
-    });
+    );
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       console.error('Authentication failed:', userError);
-      throw new Error('Invalid token');
+      throw new Error('Invalid or Expired Token');
     }
 
     console.log('User authenticated:', user.id);
@@ -58,7 +55,7 @@ Deno.serve(async (req: Request) => {
     console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
 
     console.log('Step 2: Generating fresh OAuth authorization URL');
-    const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
+    const redirectUri = `${Deno.env.get('SUPABASE_URL')}/functions/v1/handle-withings-callback`;
     const scope = 'user.metrics,user.info';
     const state = user.id;
 
@@ -87,14 +84,12 @@ Deno.serve(async (req: Request) => {
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
 
-    const statusCode = error.message.includes('Authorization') || error.message.includes('token') ? 401 : 500;
-
     return new Response(
       JSON.stringify({
         error: error.message || 'Internal server error'
       }),
       {
-        status: statusCode,
+        status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
