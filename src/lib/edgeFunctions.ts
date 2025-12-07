@@ -60,7 +60,7 @@ export async function invokeEdgeFunction<T = any>(
 export const edgeFunctions = {
   startWithingsAuth: () => invokeEdgeFunction('start-withings-auth'),
 
-  forceWithingsRelink: () => invokeEdgeFunction('force-withings-relink'),
+  forceWithingsRelink: (redirectUri?: string) => invokeEdgeFunction('force-withings-relink', { redirectUri }),
 
   handleWithingsCallback: (code: string, state: string) =>
     invokeEdgeFunction('handle-withings-callback', { code, state }),
