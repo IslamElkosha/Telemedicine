@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { useAuth, RegistrationData, AuthError } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -18,6 +18,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
   const [error, setError] = useState<AuthError | null>(null);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [waitingForUserLoad, setWaitingForUserLoad] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -29,8 +30,22 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
     specialty: '',
     license: ''
   });
-  const { login, register } = useAuth();
+  const { login, register, user, loading } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (waitingForUserLoad && !loading && user && user.id) {
+      console.log('[AuthModal] User fully loaded after login:', {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role
+      });
+
+      console.log('[AuthModal] Closing modal and letting LandingPage redirect');
+      setWaitingForUserLoad(false);
+      onClose();
+    }
+  }, [waitingForUserLoad, loading, user, onClose]);
 
   if (!isOpen) return null;
 
@@ -81,12 +96,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
 
         if (result.success) {
           setSuccess(true);
-          console.log('[AuthModal] Login successful, user profile loaded');
-
-          setTimeout(() => {
-            console.log('[AuthModal] Closing modal, LandingPage will handle redirect');
-            onClose();
-          }, 800);
+          console.log('[AuthModal] Login successful, waiting for user state to load...');
+          setWaitingForUserLoad(true);
         } else {
           console.error('[AuthModal] Login failed:', result.error);
           setError(result.error || { message: 'Login failed' });
@@ -159,8 +170,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
       <div className="bg-white rounded-xl max-w-md w-full p-6 relative max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          disabled={submitting}
-          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+          disabled={submitting || waitingForUserLoad}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 disabled:opacity-50"
         >
           <X className="h-6 w-6" />
         </button>
@@ -169,12 +180,24 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <div className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              {waitingForUserLoad ? (
+                <Loader className="h-5 w-5 text-green-600 animate-spin" />
+              ) : (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              )}
               <span className="text-green-800 font-medium">
-                {isLogin ? 'Login successful!' : 'Registration successful!'}
+                {waitingForUserLoad
+                  ? 'Loading your profile...'
+                  : (isLogin ? 'Login successful!' : 'Registration successful!')
+                }
               </span>
             </div>
-            <p className="text-green-700 text-sm mt-1">Redirecting to your dashboard...</p>
+            <p className="text-green-700 text-sm mt-1">
+              {waitingForUserLoad
+                ? 'Please wait while we load your dashboard...'
+                : 'Redirecting to your dashboard...'
+              }
+            </p>
           </div>
         )}
 
@@ -404,12 +427,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
 
           <button
             type="submit"
-            disabled={submitting || success}
+            disabled={submitting || success || waitingForUserLoad}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
           >
-            {submitting && <Loader className="h-4 w-4 animate-spin" />}
+            {(submitting || waitingForUserLoad) && <Loader className="h-4 w-4 animate-spin" />}
             <span>
-              {submitting
+              {waitingForUserLoad
+                ? 'Loading Profile...'
+                : submitting
                 ? (isLogin ? 'Signing In...' : 'Creating Account...')
                 : (isLogin ? 'Sign In' : 'Create Account')
               }

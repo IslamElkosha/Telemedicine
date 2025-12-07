@@ -1,24 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://kwlommrclqhpvthqxcge.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3bG9tbXJjbHFocHZ0aHF4Y2dlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5NjMwMzYsImV4cCI6MjA3NTUzOTAzNn0.w2Fpmdd31YXV_k4Q9yShBx_iFOZ5LWSuVG3mpeqNQdk';
+const supabaseKey = 'sb_publishable_MvxfTrIGw_nLPpfnQZvsDg_Jk5Yp_js';
 
-console.log('[Supabase] Initializing client with hardcoded credentials:', {
+console.log('[Supabase] Initializing with provided sb_publishable key...');
+console.log('[Supabase] Configuration:', {
   url: supabaseUrl,
   hasUrl: !!supabaseUrl,
-  hasAnonKey: !!supabaseAnonKey,
-  anonKeyPrefix: supabaseAnonKey?.substring(0, 20) + '...',
+  hasKey: !!supabaseKey,
+  keyPrefix: supabaseKey?.substring(0, 20) + '...',
   storageType: 'localStorage',
   persistSession: true
 });
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
     storage: window.localStorage,
     storageKey: 'telemedicine-auth',
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
     flowType: 'implicit'
   },
   realtime: {
@@ -28,7 +29,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   global: {
     headers: {
-      apikey: supabaseAnonKey
+      apikey: supabaseKey
     }
   },
   db: {
@@ -36,14 +37,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-console.log('[Supabase] Client initialized successfully with enhanced persistence');
+console.log('[Supabase] Client initialized successfully with sb_publishable key');
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'apikey': supabaseAnonKey,
+    'apikey': supabaseKey,
   };
 
   if (session?.access_token) {
