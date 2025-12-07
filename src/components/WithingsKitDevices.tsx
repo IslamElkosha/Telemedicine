@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Heart, Thermometer, Link as LinkIcon, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { invokeEdgeFunction } from '../lib/edgeFunctions';
+import { getValidSession } from '../utils/authHelper';
 
 interface DeviceStatus {
   name: string;
@@ -132,17 +133,42 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
 
   const handleLinkDevice = async () => {
     try {
-      console.log('[WithingsKitDevices] Initiating force relink to clear any expired tokens...');
+      console.log('[WithingsKitDevices] Initiating client-side Withings authorization...');
 
-      const result = await invokeEdgeFunction<{ success: boolean; authUrl: string; tokensDeleted?: number; error?: string }>('force-withings-relink');
+      const session = await getValidSession(false);
 
-      if (!result.success || !result.authUrl) {
-        throw new Error(result.error || 'Failed to generate authorization URL');
+      if (!session) {
+        console.error('[WithingsKitDevices] Auth missing or corrupted. Redirecting to login.');
+        await supabase.auth.signOut();
+        window.location.href = '/';
+        return;
       }
 
-      console.log('[WithingsKitDevices] Force relink successful. Tokens deleted:', result.tokensDeleted);
+      const nonce = crypto.randomUUID();
+      const state = btoa(JSON.stringify({
+        uid: session.user.id,
+        nonce: nonce
+      }));
+
+      sessionStorage.setItem('withings_auth_state', state);
+
+      const withingsClientId = import.meta.env.VITE_WITHINGS_CLIENT_ID;
+
+      if (!withingsClientId) {
+        throw new Error('Withings Client ID is not configured. Please check your environment variables.');
+      }
+
+      const authorizeUrl = new URL('https://account.withings.com/oauth2_user/authorize2');
+      authorizeUrl.search = new URLSearchParams({
+        response_type: 'code',
+        client_id: withingsClientId,
+        redirect_uri: `${window.location.origin}/withings-callback`,
+        scope: 'user.metrics,user.activity',
+        state: state,
+      }).toString();
+
       console.log('[WithingsKitDevices] Redirecting to Withings authorization...');
-      window.location.href = result.authUrl;
+      window.location.href = authorizeUrl.toString();
     } catch (error: any) {
       console.error('[WithingsKitDevices] Error linking device:', error);
       alert(`Failed to link device: ${error.message}`);
