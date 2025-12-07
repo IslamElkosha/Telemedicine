@@ -61,14 +61,14 @@ async function refreshAccessToken(supabase: any, userId: string, refreshToken: s
     }
 
     const expiresIn = refreshData.body.expires_in || 10800;
-    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
     const { error: updateError } = await supabase
       .from('withings_tokens')
       .update({
         access_token: refreshData.body.access_token,
         refresh_token: refreshData.body.refresh_token,
-        token_expiry_timestamp: expiryTimestamp,
+        expires_at: expiresAt,
       })
       .eq('user_id', userId);
 
@@ -142,10 +142,11 @@ Deno.serve(async (req: Request) => {
     }
 
     let accessToken = tokenData.access_token;
-    const now = Math.floor(Date.now() / 1000);
-    const bufferTime = 300;
+    const now = new Date();
+    const expiresAt = new Date(tokenData.expires_at);
+    const bufferTime = 5 * 60 * 1000;
 
-    if (tokenData.token_expiry_timestamp <= (now + bufferTime)) {
+    if (expiresAt.getTime() - now.getTime() <= bufferTime) {
       console.log('Token expired or expiring soon. Attempting to refresh...');
 
       const newAccessToken = await refreshAccessToken(supabase, user.id, tokenData.refresh_token);

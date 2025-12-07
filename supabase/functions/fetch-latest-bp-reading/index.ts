@@ -1,4 +1,4 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 
 interface BPReading {
   systolic?: number;
@@ -124,7 +124,13 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      }
+    });
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);

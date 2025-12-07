@@ -71,11 +71,11 @@ Deno.serve(async (req: Request) => {
     console.log('  - Withings User ID:', tokenData.withings_user_id);
     console.log('  - Access Token (first 30 chars):', tokenData.access_token.substring(0, 30) + '...');
     console.log('  - Refresh Token (first 30 chars):', tokenData.refresh_token.substring(0, 30) + '...');
-    console.log('  - Token Expiry Timestamp:', tokenData.token_expiry_timestamp);
-    console.log('  - Token Expiry Date:', new Date(tokenData.token_expiry_timestamp * 1000).toISOString());
-    
-    const now = Math.floor(Date.now() / 1000);
-    const timeUntilExpiry = tokenData.token_expiry_timestamp - now;
+    console.log('  - Token Expires At:', tokenData.expires_at);
+
+    const now = new Date();
+    const expiresAt = new Date(tokenData.expires_at);
+    const timeUntilExpiry = Math.floor((expiresAt.getTime() - now.getTime()) / 1000);
     console.log('  - Time until token expiry:', timeUntilExpiry, 'seconds (', Math.floor(timeUntilExpiry / 3600), 'hours )');
 
     const sevenDaysAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
@@ -137,7 +137,7 @@ Deno.serve(async (req: Request) => {
           user_id: user.id,
           user_email: user.email,
           withings_user_id: tokenData.withings_user_id,
-          token_expiry: new Date(tokenData.token_expiry_timestamp * 1000).toISOString(),
+          token_expiry: tokenData.expires_at,
           token_valid_for_seconds: timeUntilExpiry,
           request_url: measureUrl,
           request_params: {

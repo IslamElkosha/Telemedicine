@@ -95,14 +95,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const expiresIn = refreshData.body.expires_in || 10800;
-    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiresIn;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
     const { error: updateError } = await supabase
       .from('withings_tokens')
       .update({
         access_token: refreshData.body.access_token,
         refresh_token: refreshData.body.refresh_token,
-        token_expiry_timestamp: expiryTimestamp,
+        expires_at: expiresAt,
       })
       .eq('user_id', user.id);
 
