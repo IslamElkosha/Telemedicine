@@ -8,6 +8,7 @@ import { getRoleDashboardRoute } from '../utils/navigation';
 const LandingPage: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('');
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, user, loading } = useAuth();
@@ -15,8 +16,13 @@ const LandingPage: React.FC = () => {
   const redirectTo = (location.state as any)?.from;
 
   useEffect(() => {
-    if (loading || isAuthModalOpen) {
-      console.log('[LandingPage] Skipping auto-redirect:', { loading, isAuthModalOpen });
+    if (loading) {
+      console.log('[LandingPage] Still loading auth state');
+      return;
+    }
+
+    if (isAuthModalOpen || justLoggedIn) {
+      console.log('[LandingPage] Skipping auto-redirect:', { isAuthModalOpen, justLoggedIn });
       return;
     }
 
@@ -36,11 +42,23 @@ const LandingPage: React.FC = () => {
       });
       navigate(dashboardRoute, { replace: true });
     }
-  }, [isAuthenticated, user, loading, isAuthModalOpen, navigate]);
+  }, [isAuthenticated, user, loading, isAuthModalOpen, justLoggedIn, navigate]);
 
   const handleRoleSelect = (role: string) => {
     setSelectedRole(role);
     setIsAuthModalOpen(true);
+  };
+
+  const handleAuthModalClose = () => {
+    console.log('[LandingPage] Auth modal closing, setting justLoggedIn flag');
+    setIsAuthModalOpen(false);
+    if (isAuthenticated) {
+      setJustLoggedIn(true);
+      setTimeout(() => {
+        console.log('[LandingPage] Clearing justLoggedIn flag');
+        setJustLoggedIn(false);
+      }, 2000);
+    }
   };
 
   const features = [
@@ -229,7 +247,7 @@ const LandingPage: React.FC = () => {
 
       <AuthModal
         isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+        onClose={handleAuthModalClose}
         selectedRole={selectedRole}
         redirectTo={redirectTo}
       />
