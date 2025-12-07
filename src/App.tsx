@@ -19,7 +19,6 @@ import MedicalRecordsPage from './pages/MedicalRecordsPage';
 import PatientDevicesPage from './pages/PatientDevicesPage';
 import DiagnosticsPage from './pages/DiagnosticsPage';
 import PatientWithingsDataPage from './pages/PatientWithingsDataPage';
-import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -31,90 +30,22 @@ function App() {
               <div className="min-h-screen bg-gray-50">
                 <Routes>
                   <Route path="/" element={<LandingPage />} />
-
-                  {/* Protected Dashboard Routes */}
-                  <Route
-                    path="/patient/*"
-                    element={
-                      <ProtectedRoute allowedRoles={['patient']}>
-                        <PatientDashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/doctor/*"
-                    element={
-                      <ProtectedRoute allowedRoles={['doctor']}>
-                        <DoctorDashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/technician/*"
-                    element={
-                      <ProtectedRoute allowedRoles={['technician']}>
-                        <TechnicianPortal />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/admin/*"
-                    element={
-                      <ProtectedRoute allowedRoles={['admin']}>
-                        <AdminDashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/hospital/*"
-                    element={
-                      <ProtectedRoute allowedRoles={['hospital']}>
-                        <PrivateHospitalDashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/freelance-tech/*"
-                    element={
-                      <ProtectedRoute allowedRoles={['freelance-tech']}>
-                        <FreelanceTechnicianDashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-
-                  {/* Shared Protected Routes */}
-                  <Route
-                    path="/video-call/:appointmentId"
-                    element={
-                      <ProtectedRoute>
-                        <VideoCall />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/book-appointment"
-                    element={
-                      <ProtectedRoute>
-                        <BookAppointment />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/payment"
-                    element={
-                      <ProtectedRoute>
-                        <PaymentPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/diagnostics"
-                    element={
-                      <ProtectedRoute>
-                        <DiagnosticsPage />
-                      </ProtectedRoute>
-                    }
-                  />
+                  <Route path="/patient/*" element={<PatientDashboard />} />
+                  <Route path="/doctor/*" element={<DoctorDashboard />} />
+                  <Route path="/technician/*" element={<TechnicianPortal />} />
+                  <Route path="/admin/*" element={<AdminDashboard />} />
+                  <Route path="/hospital/*" element={<PrivateHospitalDashboard />} />
+                  <Route path="/freelance-tech/*" element={<FreelanceTechnicianDashboard />} />
+                  <Route path="/video-call/:appointmentId" element={<VideoCall />} />
+                  <Route path="/book-appointment" element={<BookAppointment />} />
+                  <Route path="/patient/notifications" element={<NotificationsPage />} />
+                  <Route path="/payment" element={<PaymentPage />} />
+                  <Route path="/patient/medical-records" element={<MedicalRecordsPage />} />
+                  <Route path="/patient/devices" element={<PatientDevicesPage />} />
+                  <Route path="/diagnostics" element={<DiagnosticsPage />} />
+                  <Route path="/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
+                  <Route path="/doctor/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
+                  <Route path="/technician/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
                 </Routes>
               </div>
             </Router>

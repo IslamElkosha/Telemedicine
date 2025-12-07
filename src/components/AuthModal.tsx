@@ -1,24 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { useAuth, RegistrationData, AuthError } from '../contexts/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { getRoleDashboardRoute } from '../utils/navigation';
+import { useNavigate } from 'react-router-dom';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedRole: string;
-  redirectTo?: string;
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, redirectTo }) => {
+const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<AuthError | null>(null);
   const [success, setSuccess] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [waitingForUserLoad, setWaitingForUserLoad] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -30,109 +26,51 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
     specialty: '',
     license: ''
   });
-  const { login, register, user, loading } = useAuth();
+  const { login, register, loading } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (waitingForUserLoad && !loading && user?.id) {
-      console.log('[AuthModal] ✓ User loaded, navigating to dashboard');
-      setWaitingForUserLoad(false);
-
-      const redirectPath = getRedirectPath();
-      console.log('[AuthModal] Navigating to:', redirectPath);
-
-      onClose();
-      navigate(redirectPath, { replace: true });
-    }
-  }, [waitingForUserLoad, loading, user?.id, onClose, navigate]);
 
   if (!isOpen) return null;
 
-  const getRedirectPath = () => {
-    if (redirectTo && redirectTo !== '/') {
-      console.log('[AuthModal] Using provided redirectTo:', redirectTo);
-      return redirectTo;
-    }
-    const dashboardRoute = getRoleDashboardRoute(selectedRole as any);
-    console.log('[AuthModal] Using default dashboard route:', dashboardRoute);
-    return dashboardRoute;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-
-    console.log('[AuthModal] 🔑 Form submitted');
-    console.log('[AuthModal] ✓ preventDefault called - no page reload');
-
-    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = 'Authentication in progress. Are you sure you want to leave?';
-      return e.returnValue;
-    };
-
-    window.addEventListener('beforeunload', beforeUnloadHandler);
-
     setError(null);
     setSuccess(false);
-    setSubmitting(true);
-
-    try {
-      if (isLogin) {
-        console.log('[AuthModal] 📤 Sending login request...');
-
-        const result = await login(formData.email, formData.password, selectedRole as any);
-
-        if (result.success) {
-          console.log('[AuthModal] ✅ Login successful');
-          setSuccess(true);
-          setWaitingForUserLoad(true);
-        } else {
-          console.error('[AuthModal] ❌ Login failed:', result.error?.message);
-          setError(result.error || { message: 'Login failed' });
-        }
-      } else {
-        const registrationData: RegistrationData = {
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          confirmPassword: formData.confirmPassword,
-          role: selectedRole as any,
-          specialty: formData.specialty,
-          license: formData.license,
-          phone: formData.phone,
-          dateOfBirth: formData.dateOfBirth,
-          address: formData.address
-        };
-
-        const result = await register(registrationData);
-        if (result.success) {
-          setSuccess(true);
-          console.log('[AuthModal] Registration successful, navigating to dashboard');
-
-          const dashboardRoute = selectedRole === 'patient' ? '/patient' :
-                                selectedRole === 'doctor' ? '/doctor' :
-                                selectedRole === 'technician' ? '/technician' :
-                                selectedRole === 'admin' ? '/admin' :
-                                selectedRole === 'hospital' ? '/hospital' :
-                                selectedRole === 'freelance-tech' ? '/freelance-tech' :
-                                `/${selectedRole}`;
-
-          console.log('[AuthModal] Explicit navigation to:', dashboardRoute);
+    
+    if (isLogin) {
+      const result = await login(formData.email, formData.password, selectedRole as any);
+      if (result.success) {
+        setSuccess(true);
+        setTimeout(() => {
           onClose();
-          navigate(dashboardRoute);
-        } else {
-          console.error('[AuthModal] Registration failed:', result.error);
-          setError(result.error || { message: 'Registration failed' });
-        }
+          navigate(`/${selectedRole}`);
+        }, 1000);
+      } else {
+        setError(result.error || { message: 'Login failed' });
       }
-    } catch (error: any) {
-      console.error('[AuthModal] Unexpected error during form submission:', error);
-      setError({ message: error?.message || 'An unexpected error occurred. Please try again.' });
-    } finally {
-      window.removeEventListener('beforeunload', beforeUnloadHandler);
-      console.log('[AuthModal] Removed beforeunload handler');
-      setSubmitting(false);
+    } else {
+      const registrationData: RegistrationData = {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword,
+        role: selectedRole as any,
+        specialty: formData.specialty,
+        license: formData.license,
+        phone: formData.phone,
+        dateOfBirth: formData.dateOfBirth,
+        address: formData.address
+      };
+      
+      const result = await register(registrationData);
+      if (result.success) {
+        setSuccess(true);
+        setTimeout(() => {
+          onClose();
+          navigate(`/${selectedRole}`);
+        }, 1500);
+      } else {
+        setError(result.error || { message: 'Registration failed' });
+      }
     }
   };
 
@@ -148,6 +86,28 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
     return roleMap[role] || role;
   };
 
+  // Demo credentials helper
+  const fillDemoCredentials = () => {
+    const demoCredentials: { [key: string]: { email: string; password: string } } = {
+      'patient': { email: 'patient@test.com', password: 'demo123' },
+      'doctor': { email: 'doctor@test.com', password: 'demo123' },
+      'technician': { email: 'tech@test.com', password: 'demo123' },
+      'admin': { email: 'admin@test.com', password: 'admin2025!' },
+      'hospital': { email: 'hospital@test.com', password: 'demo123' },
+      'freelance-tech': { email: 'freelance@test.com', password: 'demo123' }
+    };
+    
+    const demo = demoCredentials[selectedRole];
+    if (demo) {
+      setFormData(prev => ({ 
+        ...prev, 
+        email: demo.email, 
+        password: demo.password,
+        confirmPassword: demo.password 
+      }));
+    }
+  };
+
   const getFieldError = (field: string) => {
     return error?.field === field ? error.message : null;
   };
@@ -161,8 +121,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
       <div className="bg-white rounded-xl max-w-md w-full p-6 relative max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          disabled={submitting || waitingForUserLoad}
-          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 disabled:opacity-50"
+          disabled={loading}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
         >
           <X className="h-6 w-6" />
         </button>
@@ -171,24 +131,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <div className="flex items-center space-x-2">
-              {waitingForUserLoad ? (
-                <Loader className="h-5 w-5 text-green-600 animate-spin" />
-              ) : (
-                <CheckCircle className="h-5 w-5 text-green-600" />
-              )}
+              <CheckCircle className="h-5 w-5 text-green-600" />
               <span className="text-green-800 font-medium">
-                {waitingForUserLoad
-                  ? 'Loading your profile...'
-                  : (isLogin ? 'Login successful!' : 'Registration successful!')
-                }
+                {isLogin ? 'Login successful!' : 'Registration successful!'}
               </span>
             </div>
-            <p className="text-green-700 text-sm mt-1">
-              {waitingForUserLoad
-                ? 'Please wait while we load your dashboard...'
-                : 'Redirecting to your dashboard...'
-              }
-            </p>
+            <p className="text-green-700 text-sm mt-1">Redirecting to your dashboard...</p>
           </div>
         )}
 
@@ -227,7 +175,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                   hasFieldError('name') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
                 placeholder="Enter your full name"
-                disabled={submitting}
+                disabled={loading}
               />
               {getFieldError('name') && (
                 <p className="text-red-600 text-sm mt-1">{getFieldError('name')}</p>
@@ -248,7 +196,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                 hasFieldError('email') ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
               placeholder="Enter your email"
-              disabled={submitting}
+              disabled={loading}
             />
             {getFieldError('email') && (
               <p className="text-red-600 text-sm mt-1">{getFieldError('email')}</p>
@@ -269,12 +217,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                   hasFieldError('password') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
                 placeholder={isLogin ? "Enter your password" : "Create a strong password"}
-                disabled={submitting}
+                disabled={loading}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                disabled={submitting}
+                disabled={loading}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
               >
                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -305,12 +253,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                     hasFieldError('confirmPassword') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                   }`}
                   placeholder="Confirm your password"
-                  disabled={submitting}
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  disabled={submitting}
+                  disabled={loading}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 >
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -338,7 +286,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                 onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="+1 (555) 123-4567"
-                disabled={submitting}
+                disabled={loading}
               />
             </div>
           )}
@@ -355,7 +303,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     hasFieldError('specialty') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                   }`}
-                  disabled={submitting}
+                  disabled={loading}
                   required
                 >
                   <option value="">Select Specialty</option>
@@ -390,7 +338,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                     hasFieldError('license') ? 'border-red-300 bg-red-50' : 'border-gray-300'
                   }`}
                   placeholder="e.g., MD12345"
-                  disabled={submitting}
+                  disabled={loading}
                   maxLength={20}
                 />
                 {getFieldError('license') && (
@@ -418,21 +366,29 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
 
           <button
             type="submit"
-            disabled={submitting || success || waitingForUserLoad}
+            disabled={loading || success}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
           >
-            {(submitting || waitingForUserLoad) && <Loader className="h-4 w-4 animate-spin" />}
+            {loading && <Loader className="h-4 w-4 animate-spin" />}
             <span>
-              {waitingForUserLoad
-                ? 'Loading Profile...'
-                : submitting
-                ? (isLogin ? 'Signing In...' : 'Creating Account...')
+              {loading 
+                ? (isLogin ? 'Signing In...' : 'Creating Account...') 
                 : (isLogin ? 'Sign In' : 'Create Account')
               }
             </span>
           </button>
         </form>
 
+        {!loading && !success && (
+          <div className="mt-4 text-center">
+            <button
+              onClick={fillDemoCredentials}
+              className="text-sm text-blue-600 hover:text-blue-700 underline"
+            >
+              Use Demo Credentials
+            </button>
+          </div>
+        )}
 
         <div className="mt-6 text-center">
           <button
@@ -452,7 +408,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
                 license: ''
               });
             }}
-            disabled={submitting}
+            disabled={loading}
             className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
           >
             {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}

@@ -1,42 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Heart, Shield, Users, Video, Stethoscope, Calendar, Loader } from 'lucide-react';
+import { Heart, Shield, Users, Video, Stethoscope, Calendar } from 'lucide-react';
 import AuthModal from '../components/AuthModal';
-import { getRoleDashboardRoute } from '../utils/navigation';
 
 const LandingPage: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const navigate = useNavigate();
-  const location = useLocation();
-  const { isAuthenticated, user, loading } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
-  const redirectTo = (location.state as any)?.from;
-
-  useEffect(() => {
-    if (loading) {
-      return;
+  React.useEffect(() => {
+    if (isAuthenticated && user) {
+      navigate(`/${user.role}`);
     }
-
-    if (isAuthModalOpen) {
-      return;
-    }
-
-    if (isAuthenticated && user?.id && user?.role) {
-      const dashboardRoute = getRoleDashboardRoute(user.role);
-      console.log('[LandingPage] 🚀 Redirecting to:', dashboardRoute);
-      navigate(dashboardRoute, { replace: true });
-    }
-  }, [isAuthenticated, user?.id, user?.role, loading, isAuthModalOpen, navigate]);
+  }, [isAuthenticated, user, navigate]);
 
   const handleRoleSelect = (role: string) => {
     setSelectedRole(role);
     setIsAuthModalOpen(true);
-  };
-
-  const handleAuthModalClose = () => {
-    setIsAuthModalOpen(false);
   };
 
   const features = [
@@ -110,20 +92,6 @@ const LandingPage: React.FC = () => {
       color: 'bg-teal-500 hover:bg-teal-600'
     }
   ];
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-            <Loader className="h-8 w-8 text-blue-600 animate-spin" />
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading TeleMedCare</h2>
-          <p className="text-gray-600">Checking authentication status...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
@@ -237,11 +205,10 @@ const LandingPage: React.FC = () => {
         </div>
       </footer>
 
-      <AuthModal
+      <AuthModal 
         isOpen={isAuthModalOpen}
-        onClose={handleAuthModalClose}
+        onClose={() => setIsAuthModalOpen(false)}
         selectedRole={selectedRole}
-        redirectTo={redirectTo}
       />
     </div>
   );

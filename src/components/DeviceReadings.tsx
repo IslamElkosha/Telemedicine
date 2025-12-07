@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Activity, Thermometer, Bluetooth, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { callEdgeFunction } from '../utils/api';
 
 interface DeviceReading {
   deviceType: string;
@@ -73,7 +72,39 @@ const DeviceReadings: React.FC = () => {
 
       console.log('[DeviceReadings] Calling fetch-latest-bp-reading Edge Function...');
 
-      const bpData: BPData = await callEdgeFunction('fetch-latest-bp-reading', 'GET');
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const cacheBuster = Date.now();
+      const apiUrl = `${supabaseUrl}/functions/v1/fetch-latest-bp-reading?_t=${cacheBuster}`;
+
+      console.log('[DeviceReadings] Cache-busting URL:', apiUrl);
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
+
+      console.log('[DeviceReadings] Edge Function response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[DeviceReadings] Edge Function error:', errorData);
+
+        if (errorData.needsReconnect || errorData.error?.includes('No Withings connection')) {
+          setError('Please connect your Withings device first');
+          setReadings(getEmptyReadings());
+          setLoading(false);
+          return;
+        }
+
+        throw new Error(errorData.error || 'Failed to fetch BP data');
+      }
+
+      const bpData: BPData = await response.json();
       console.log('=== [DeviceReadings] RAW RESPONSE FROM BACKEND ===');
       console.log('Full response object:', JSON.stringify(bpData, null, 2));
       console.log('Systolic (raw):', bpData.systolic, 'Type:', typeof bpData.systolic);
@@ -82,9 +113,8 @@ const DeviceReadings: React.FC = () => {
       console.log('Timestamp:', bpData.timestamp, '→', new Date(bpData.timestamp * 1000).toISOString());
       console.log('Success flag:', bpData.success);
 
-      if (!bpData || !bpData.systolic || !bpData.diastolic) {
-        console.log('[DeviceReadings] No BP data available (systolic:', bpData?.systolic, ', diastolic:', bpData?.diastolic, ')');
-        setError('Please connect your Withings device first');
+      if (!bpData.success || !bpData.systolic || !bpData.diastolic) {
+        console.log('[DeviceReadings] No BP data available (success:', bpData.success, ', systolic:', bpData.systolic, ', diastolic:', bpData.diastolic, ')');
         setReadings(getEmptyReadings());
         setLoading(false);
         return;

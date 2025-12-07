@@ -3,10 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma',
-  'Cache-Control': 'no-cache, no-store, must-revalidate',
-  'Pragma': 'no-cache',
-  'Expires': '0',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
 const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
@@ -21,26 +18,16 @@ Deno.serve(async (req: Request) => {
     console.log('=== FORCE WITHINGS RELINK INITIATED ===');
 
     const authHeader = req.headers.get('Authorization');
-    console.log('[Edge Function] Authorization header present:', !!authHeader);
-
     if (!authHeader) {
-      console.error('[Edge Function] Missing Authorization header');
       return new Response(
-        JSON.stringify({
-          error: 'Missing authorization header',
-          details: 'Authorization header with Bearer token is required'
-        }),
+        JSON.stringify({ error: 'Missing authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[Edge Function] Auth header value (first 20 chars):', authHeader.slice(0, 20) + '...');
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-    console.log('[Edge Function] Creating service role client (for delete operation)...');
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -48,37 +35,33 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    console.log('[Edge Function] Verifying user identity...');
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.error('[Edge Function] Authentication failed:', authError?.message);
+      console.error('Authentication failed:', authError);
       return new Response(
-        JSON.stringify({
-          error: 'Unauthorized',
-          details: authError?.message || 'Invalid or expired token'
-        }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[Edge Function] Authenticated user:', user.id);
+    console.log('User authenticated:', user.id);
 
-    console.log('[Edge Function] Step 1: Deleting expired/invalid tokens from database...');
-    const { error: deleteError, data: deletedData } = await supabaseAdmin
+    console.log('Step 1: Deleting expired/invalid tokens from database');
+    const { error: deleteError, data: deletedData } = await supabase
       .from('withings_tokens')
       .delete()
       .eq('user_id', user.id)
       .select();
 
     if (deleteError) {
-      console.error('[Edge Function] Error deleting tokens:', deleteError.message);
+      console.error('Error deleting tokens:', deleteError);
     } else {
-      console.log('[Edge Function] Tokens deleted successfully:', deletedData?.length || 0, 'records');
+      console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
     }
 
-    console.log('[Edge Function] Step 2: Generating fresh OAuth authorization URL...');
+    console.log('Step 2: Generating fresh OAuth authorization URL');
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
     const scope = 'user.metrics,user.info';
     const state = user.id;
