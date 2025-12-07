@@ -147,8 +147,8 @@ const WithingsConnector: React.FC = () => {
       console.log('[WithingsConnect] Client ID (first 20 chars):', clientId.substring(0, 20) + '...');
       console.log('[WithingsConnect] Initiating force relink to clear any expired tokens...');
 
-      const REDIRECT_URI = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
-      console.log('[WithingsConnect] Using hardcoded redirect URI:', REDIRECT_URI);
+      const REDIRECT_URI = import.meta.env.VITE_WITHINGS_REDIRECT_URI;
+      console.log('[WithingsConnect] Using redirect URI from .env:', REDIRECT_URI);
 
       const result = await edgeFunctions.forceWithingsRelink(REDIRECT_URI);
       console.log('[WithingsConnect] Edge function result:', result);

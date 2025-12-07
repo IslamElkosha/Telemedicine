@@ -160,10 +160,10 @@ const WithingsKitDevices: React.FC<WithingsKitDevicesProps> = ({ onLinkDevice, c
       console.log('[LinkDevice] Access token (first 30 chars):', session.access_token.substring(0, 30) + '...');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const REDIRECT_URI = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
+      const REDIRECT_URI = import.meta.env.VITE_WITHINGS_REDIRECT_URI;
 
       console.log('[LinkDevice] Supabase URL:', supabaseUrl);
-      console.log('[LinkDevice] Redirect URI (hardcoded):', REDIRECT_URI);
+      console.log('[LinkDevice] Redirect URI (from .env):', REDIRECT_URI);
 
       console.log('[LinkDevice] Initiating force relink to clear any expired tokens...');
       const response = await fetch(`${supabaseUrl}/functions/v1/force-withings-relink`, {
