@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
+import { createClient } from 'npm:@supabase/supabase-js@2.46.1';
 
 interface BPReading {
   systolic?: number;
@@ -109,7 +109,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     console.log('=== FETCH LATEST BP READING START ===');
-    
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('Missing authorization header');
@@ -122,9 +122,22 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!jwt) {
+      console.error('Missing Bearer token');
+      return new Response(
+        JSON.stringify({
+          connectionStatus: 'Disconnected',
+          error: 'Missing Bearer token'
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -132,20 +145,19 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
       console.error('User authentication failed:', authError);
       return new Response(
         JSON.stringify({
           connectionStatus: 'Disconnected',
-          error: 'Unauthorized'
+          error: 'Invalid JWT'
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    const user = userData.user;
     console.log('Authenticated user:', user.id);
 
     const { data: tokenData, error: tokenError } = await supabase
