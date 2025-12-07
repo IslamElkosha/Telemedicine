@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
+import { createClient } from 'npm:@supabase/supabase-js@2.46.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,9 +25,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!jwt) {
+      return new Response(
+        JSON.stringify({ error: 'Missing Bearer token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -35,17 +45,16 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
       console.error('Authentication failed:', authError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Invalid JWT' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    const user = userData.user;
     console.log('User authenticated:', user.id);
 
     console.log('Step 1: Deleting expired/invalid tokens from database');
@@ -57,9 +66,13 @@ Deno.serve(async (req: Request) => {
 
     if (deleteError) {
       console.error('Error deleting tokens:', deleteError);
-    } else {
-      console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
+      return new Response(
+        JSON.stringify({ error: 'Failed to delete tokens', details: deleteError.message }),
+        { status: 406, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    console.log('Tokens deleted successfully:', deletedData?.length || 0, 'records');
 
     console.log('Step 2: Generating fresh OAuth authorization URL');
     const redirectUri = `${supabaseUrl}/functions/v1/handle-withings-callback`;
