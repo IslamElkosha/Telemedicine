@@ -36,10 +36,20 @@ const WithingsCallbackPage: React.FC = () => {
 
       sessionStorage.removeItem('withings_auth_state');
 
-      const session = await getValidSession(false);
+      setMessage('Restoring session...');
 
-      if (!session) {
-        throw new Error('No valid session found');
+      let session;
+      try {
+        session = await getValidSession(true);
+      } catch (sessionError) {
+        console.error('Session refresh failed, trying getSession:', sessionError);
+        const { data: { session: fallbackSession } } = await supabase.auth.getSession();
+
+        if (!fallbackSession) {
+          throw new Error('Session expired. Please log in again and retry linking.');
+        }
+
+        session = fallbackSession;
       }
 
       setMessage('Exchanging authorization code for access tokens...');
@@ -78,7 +88,7 @@ const WithingsCallbackPage: React.FC = () => {
       setMessage('Withings account linked successfully!');
 
       setTimeout(() => {
-        navigate('/');
+        navigate('/patient/devices');
       }, 2000);
     } catch (error: any) {
       console.error('[WithingsCallback] Error:', error);
