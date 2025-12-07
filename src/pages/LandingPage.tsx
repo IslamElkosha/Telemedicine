@@ -15,52 +15,20 @@ const LandingPage: React.FC = () => {
   const redirectTo = (location.state as any)?.from;
 
   useEffect(() => {
-    console.log('[LandingPage] useEffect triggered, checking auth state:', {
-      loading,
-      isAuthenticated,
-      hasUser: !!user,
-      userId: user?.id,
-      userRole: user?.role,
-      isAuthModalOpen,
-      timestamp: new Date().toISOString()
-    });
-
     if (loading) {
-      console.log('[LandingPage] Still loading auth state, waiting...');
       return;
     }
 
     if (isAuthModalOpen) {
-      console.log('[LandingPage] Modal is open, skipping auto-redirect');
       return;
     }
 
-    if (isAuthenticated && user && user.id) {
+    if (isAuthenticated && user?.id && user?.role) {
       const dashboardRoute = getRoleDashboardRoute(user.role);
-      console.log('[LandingPage] ✓ User fully authenticated, preparing redirect:', {
-        userId: user.id,
-        userName: user.name,
-        userEmail: user.email,
-        userRole: user.role,
-        dashboardRoute,
-        timestamp: new Date().toISOString()
-      });
-
-      console.log('[LandingPage] Navigating to dashboard in 100ms...');
-      const timer = setTimeout(() => {
-        console.log('[LandingPage] Executing navigation to:', dashboardRoute);
-        navigate(dashboardRoute, { replace: true });
-      }, 100);
-
-      return () => clearTimeout(timer);
-    } else {
-      console.log('[LandingPage] User not authenticated or incomplete:', {
-        isAuthenticated,
-        hasUser: !!user,
-        hasUserId: !!user?.id
-      });
+      console.log('[LandingPage] 🚀 Redirecting to:', dashboardRoute);
+      navigate(dashboardRoute, { replace: true });
     }
-  }, [isAuthenticated, user, user?.id, user?.role, loading, isAuthModalOpen, navigate]);
+  }, [isAuthenticated, user?.id, user?.role, loading, isAuthModalOpen, navigate]);
 
   const handleRoleSelect = (role: string) => {
     setSelectedRole(role);
@@ -68,7 +36,6 @@ const LandingPage: React.FC = () => {
   };
 
   const handleAuthModalClose = () => {
-    console.log('[LandingPage] Auth modal closing');
     setIsAuthModalOpen(false);
   };
 

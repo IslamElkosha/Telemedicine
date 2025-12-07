@@ -34,18 +34,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (waitingForUserLoad && !loading && user && user.id) {
-      console.log('[AuthModal] User fully loaded after login:', {
-        userId: user.id,
-        userEmail: user.email,
-        userRole: user.role
-      });
-
-      console.log('[AuthModal] Closing modal and letting LandingPage redirect');
+    if (waitingForUserLoad && !loading && user?.id) {
+      console.log('[AuthModal] ✓ User loaded, closing modal');
       setWaitingForUserLoad(false);
       onClose();
     }
-  }, [waitingForUserLoad, loading, user, onClose]);
+  }, [waitingForUserLoad, loading, user?.id, onClose]);
 
   if (!isOpen) return null;
 
@@ -63,9 +57,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
     e.preventDefault();
     e.stopPropagation();
 
-    console.log('[AuthModal] ========== FORM SUBMISSION STARTED ==========');
-    console.log('[AuthModal] preventDefault() called - page should NOT reload');
-    console.log('[AuthModal] Current URL:', window.location.href);
+    console.log('[AuthModal] 🔑 Form submitted');
+    console.log('[AuthModal] ✓ preventDefault called - no page reload');
 
     const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
@@ -79,41 +72,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, selectedRole, re
     setSuccess(false);
     setSubmitting(true);
 
-    console.log('[AuthModal] Form submission initialized');
-    console.log('[AuthModal] isLogin:', isLogin);
-    console.log('[AuthModal] Form data state:', {
-      email: formData.email,
-      emailType: typeof formData.email,
-      emailLength: formData.email?.length,
-      emailValue: formData.email,
-      password: formData.password ? '***' + formData.password.slice(-3) : 'undefined',
-      passwordType: typeof formData.password,
-      passwordLength: formData.password?.length,
-      selectedRole: selectedRole
-    });
-
     try {
       if (isLogin) {
-        console.log('[AuthModal] Calling login function with:', {
-          email: formData.email,
-          password: formData.password ? 'present' : 'missing',
-          role: selectedRole
-        });
+        console.log('[AuthModal] 📤 Sending login request...');
 
         const result = await login(formData.email, formData.password, selectedRole as any);
 
-        console.log('[AuthModal] Login result:', {
-          success: result.success,
-          hasError: !!result.error,
-          errorMessage: result.error?.message
-        });
-
         if (result.success) {
+          console.log('[AuthModal] ✅ Login successful');
           setSuccess(true);
-          console.log('[AuthModal] Login successful, waiting for user state to load...');
           setWaitingForUserLoad(true);
         } else {
-          console.error('[AuthModal] Login failed:', result.error);
+          console.error('[AuthModal] ❌ Login failed:', result.error?.message);
           setError(result.error || { message: 'Login failed' });
         }
       } else {

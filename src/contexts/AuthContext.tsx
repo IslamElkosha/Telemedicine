@@ -524,164 +524,68 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (email: string, password: string, role: User['role']): Promise<{ success: boolean; error?: AuthError }> => {
+    const startTime = Date.now();
+
     try {
-      console.log('[AuthContext] Login attempt started');
-      console.log('[AuthContext] Received parameters:', {
-        email: email,
-        emailType: typeof email,
-        emailLength: email?.length,
-        password: password ? '***' + password.slice(-3) : 'undefined',
-        passwordType: typeof password,
-        passwordLength: password?.length,
-        role: role
-      });
+      console.log('[AuthContext] 🔐 Login initiated for:', email);
 
       if (!validateEmail(email)) {
-        console.error('[AuthContext] Email validation failed:', email);
         return { success: false, error: { field: 'email', message: 'Please enter a valid email address' } };
       }
 
       if (!password) {
-        console.error('[AuthContext] Password is missing or empty');
         return { success: false, error: { field: 'password', message: 'Password is required' } };
       }
 
-      const loginPayload = {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase(),
         password: password
-      };
-
-      console.log('[AuthContext] Prepared login payload:', {
-        email: loginPayload.email,
-        password: loginPayload.password ? '***' + loginPayload.password.slice(-3) : 'missing',
-        passwordLength: loginPayload.password?.length
-      });
-
-      console.log('[AuthContext] Calling supabase.auth.signInWithPassword...');
-      const startTime = Date.now();
-
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword(loginPayload);
-
-      const elapsedTime = Date.now() - startTime;
-      console.log('[AuthContext] Supabase response received:', {
-        hasData: !!authData,
-        hasUser: !!authData?.user,
-        hasError: !!authError,
-        errorMessage: authError?.message,
-        errorStatus: authError?.status,
-        elapsedTimeMs: elapsedTime,
-        elapsedTimeSec: (elapsedTime / 1000).toFixed(2) + 's'
       });
 
       if (authError) {
-        console.error('[AuthContext] Authentication error:', authError);
+        console.error('[AuthContext] ❌ Authentication failed:', authError.message);
         return { success: false, error: { message: 'Invalid email or password' } };
       }
 
       if (!authData.user) {
-        return { success: false, error: { message: 'Login failed' } };
+        return { success: false, error: { message: 'Login failed - no user returned' } };
       }
 
-      console.log('[AuthContext] Fetching user role from database...');
-      const roleQueryStart = Date.now();
+      console.log('[AuthContext] ✓ Authentication successful for user:', authData.user.id);
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .maybeSingle();
-
-      const roleQueryTime = Date.now() - roleQueryStart;
-      console.log('[AuthContext] Role query completed:', {
-        elapsedMs: roleQueryTime,
-        hasUserData: !!userData,
-        role: userData?.role
-      });
-
-      const userRole = userData ? reverseRoleMapping[userData.role] : null;
-
-      if (userRole !== role) {
-        console.log('[AuthContext] Role mismatch detected:', {
-          selectedRole: role,
-          databaseRole: userRole,
-          action: 'Using database role and will redirect to correct dashboard'
-        });
-      } else {
-        console.log('[AuthContext] Role matches, proceeding with login');
-      }
-
-      console.log('[AuthContext] Verifying session immediately after signIn...');
-
-      let sessionCheckAttempts = 0;
-      let immediateSession = null;
-      const maxAttempts = 5;
-
-      while (sessionCheckAttempts < maxAttempts) {
+      let sessionVerified = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
         const { data: { session } } = await supabase.auth.getSession();
         const storageData = localStorage.getItem('telemedicine-auth');
 
-        console.log(`[AuthContext] Session check attempt ${sessionCheckAttempts + 1}/${maxAttempts}:`, {
-          hasSession: !!session,
-          hasAccessToken: !!session?.access_token,
-          userId: session?.user?.id,
-          hasStorageData: !!storageData,
-          storageLength: storageData?.length
-        });
-
-        if (session && session.access_token && storageData) {
-          immediateSession = session;
-          console.log('[AuthContext] ✓ Session verified with storage persistence');
+        if (session?.access_token && storageData) {
+          sessionVerified = true;
+          console.log('[AuthContext] ✓ Session persisted to localStorage');
           break;
         }
 
-        sessionCheckAttempts++;
-        if (sessionCheckAttempts < maxAttempts) {
-          console.log('[AuthContext] Session not fully persisted yet, waiting 100ms...');
+        if (attempt < 4) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
-      if (!immediateSession) {
-        console.error('[AuthContext] CRITICAL: Session not created or persisted after signInWithPassword!');
-        console.error('[AuthContext] This suggests localStorage might be blocked or session creation failed');
-        return { success: false, error: { message: 'Session creation failed. Please check if cookies/storage are enabled.' } };
+      if (!sessionVerified) {
+        console.error('[AuthContext] ❌ Session persistence failed');
+        return {
+          success: false,
+          error: { message: 'Session could not be saved. Please check browser storage settings.' }
+        };
       }
 
-      console.log('[AuthContext] Session verified, loading user profile...');
-      const profileLoadStart = Date.now();
-
+      console.log('[AuthContext] 📦 Loading user profile...');
       await loadUserProfile(authData.user.id);
 
-      const profileLoadTime = Date.now() - profileLoadStart;
-      console.log('[AuthContext] Profile loaded:', {
-        elapsedMs: profileLoadTime,
-        userStateSet: !!user
-      });
-
-      console.log('[AuthContext] Final verification of session persistence...');
-      const { data: { session: finalSession } } = await supabase.auth.getSession();
-      console.log('[AuthContext] Final session check:', {
-        hasSession: !!finalSession,
-        hasUser: !!finalSession?.user,
-        userId: finalSession?.user?.id,
-        storageKey: 'telemedicine-auth',
-        storageExists: !!localStorage.getItem('telemedicine-auth'),
-        storageLength: localStorage.getItem('telemedicine-auth')?.length
-      });
-
-      if (!finalSession) {
-        console.error('[AuthContext] CRITICAL: Session lost after profile load!');
-        return { success: false, error: { message: 'Session persistence failed. Please try again.' } };
-      }
-
-      console.log('[AuthContext] Login completed successfully, total time:', {
-        totalMs: Date.now() - startTime,
-        totalSec: ((Date.now() - startTime) / 1000).toFixed(2) + 's'
-      });
+      const totalTime = Date.now() - startTime;
+      console.log(`[AuthContext] ✅ Login complete in ${totalTime}ms`);
 
       return { success: true };
-    } catch (error) {
-      console.error('[AuthContext] Login error:', error);
+    } catch (error: any) {
+      console.error('[AuthContext] ❌ Login error:', error?.message || error);
       return { success: false, error: { message: 'An unexpected error occurred. Please try again.' } };
     }
   };
