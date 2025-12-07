@@ -129,11 +129,11 @@ const WithingsConnector: React.FC = () => {
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
         headers: {
-          'Authorization': `Bearer ${anonKey}`,
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
         },
       });
 
@@ -144,14 +144,16 @@ const WithingsConnector: React.FC = () => {
           const refreshResponse = await fetch(`${supabaseUrl}/functions/v1/withings-refresh-token`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${anonKey}`,
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
             },
           });
 
           if (refreshResponse.ok) {
             const retryResponse = await fetch(`${supabaseUrl}/functions/v1/withings-fetch-measurements`, {
               headers: {
-                'Authorization': `Bearer ${anonKey}`,
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
               },
             });
             const retryResult = await retryResponse.json();

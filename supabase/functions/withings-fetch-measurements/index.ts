@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
+import { createClient } from 'npm:@supabase/supabase-js@2.46.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -108,9 +108,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!jwt) {
+      return new Response(
+        JSON.stringify({ error: 'Missing Bearer token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -118,21 +127,21 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Invalid JWT' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const user = userData.user;
 
     const { data: tokenData, error: tokenError } = await supabase
       .from('withings_tokens')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (tokenError || !tokenData) {
       return new Response(
