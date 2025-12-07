@@ -127,14 +127,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const initializeAuth = async () => {
       try {
         console.log('[AuthContext] Initializing auth...');
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log('[AuthContext] Checking localStorage for session:', localStorage.getItem('telemedicine-auth'));
+
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        console.log('[AuthContext] getSession result:', {
+          hasSession: !!session,
+          hasUser: !!session?.user,
+          userId: session?.user?.id,
+          userEmail: session?.user?.email,
+          error: error?.message
+        });
 
         if (mounted) {
           if (session?.user) {
             console.log('[AuthContext] Session found, loading profile for:', session.user.id);
             await loadUserProfile(session.user.id);
           } else {
-            console.log('[AuthContext] No session found');
+            console.log('[AuthContext] No session found, user needs to login');
             setLoading(false);
           }
         }
@@ -546,6 +556,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       console.log('[AuthContext] Allowing React state to propagate...');
       await new Promise(resolve => setTimeout(resolve, 200));
+
+      console.log('[AuthContext] Verifying session was saved to storage...');
+      const { data: { session: verifySession } } = await supabase.auth.getSession();
+      console.log('[AuthContext] Session verification:', {
+        hasSession: !!verifySession,
+        hasUser: !!verifySession?.user,
+        userId: verifySession?.user?.id,
+        userEmail: verifySession?.user?.email,
+        storageKey: 'telemedicine-auth',
+        storageHasData: !!localStorage.getItem('telemedicine-auth')
+      });
+
+      if (!verifySession) {
+        console.error('[AuthContext] CRITICAL: Session not found after login! This is a persistence issue.');
+        return { success: false, error: { message: 'Session persistence failed. Please try again.' } };
+      }
 
       console.log('[AuthContext] Login completed successfully, total time:', {
         totalMs: Date.now() - startTime,
