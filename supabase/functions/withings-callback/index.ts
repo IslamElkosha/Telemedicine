@@ -53,8 +53,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Get the authorization code from request body
-    const { code } = await req.json();
+    // Get the authorization code and state from request body
+    const { code, state } = await req.json();
 
     if (!code) {
       return new Response(
@@ -67,6 +67,60 @@ Deno.serve(async (req: Request) => {
           },
         }
       );
+    }
+
+    // Verify state parameter for CSRF protection
+    if (state) {
+      const { data: stateData, error: stateError } = await supabase
+        .from("oauth_states")
+        .select("user_id, expires_at")
+        .eq("state", state)
+        .eq("provider", "withings")
+        .single();
+
+      if (stateError || !stateData) {
+        return new Response(
+          JSON.stringify({ error: "Invalid state parameter" }),
+          {
+            status: 400,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
+
+      // Check if state has expired
+      if (new Date(stateData.expires_at) < new Date()) {
+        return new Response(
+          JSON.stringify({ error: "State parameter expired" }),
+          {
+            status: 400,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
+
+      // Verify state belongs to the authenticated user
+      if (stateData.user_id !== user.id) {
+        return new Response(
+          JSON.stringify({ error: "State mismatch" }),
+          {
+            status: 403,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
+
+      // Delete used state
+      await supabase.from("oauth_states").delete().eq("state", state);
     }
 
     // Get Withings credentials from environment
@@ -133,6 +187,9 @@ Deno.serve(async (req: Request) => {
       userid: withings_userid,
     } = tokenData.body;
 
+    // Calculate expires_at timestamp
+    const expiresAt = new Date(Date.now() + expires_in * 1000);
+
     // Upsert tokens into withings_tokens table
     const { error: upsertError } = await supabase
       .from("withings_tokens")
@@ -142,6 +199,7 @@ Deno.serve(async (req: Request) => {
           access_token,
           refresh_token,
           expires_in,
+          expires_at: expiresAt.toISOString(),
           scope: scope || "",
           withings_userid: withings_userid.toString(),
           updated_at: new Date().toISOString(),
@@ -154,7 +212,7 @@ Deno.serve(async (req: Request) => {
     if (upsertError) {
       console.error("Database upsert error:", upsertError);
       return new Response(
-        JSON.stringify({ error: "Failed to save tokens" }),
+        JSON.stringify({ error: "Failed to save tokens", details: upsertError.message }),
         {
           status: 500,
           headers: {
@@ -170,6 +228,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         message: "Withings account connected successfully",
         withings_userid,
+        expires_at: expiresAt.toISOString(),
       }),
       {
         status: 200,

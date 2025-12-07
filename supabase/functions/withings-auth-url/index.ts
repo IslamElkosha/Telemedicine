@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.39.7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +14,43 @@ Deno.serve(async (req: Request) => {
         status: 200,
         headers: corsHeaders,
       });
+    }
+
+    // Get authorization header for user authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        {
+          status: 401,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Verify user from JWT
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        {
+          status: 401,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
     }
 
     const clientId = Deno.env.get("WITHINGS_CLIENT_ID");
@@ -33,6 +71,31 @@ Deno.serve(async (req: Request) => {
 
     // Generate a random state for CSRF protection
     const state = crypto.randomUUID();
+
+    // Store state in database for verification (expires in 10 minutes)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const { error: stateError } = await supabase
+      .from("oauth_states")
+      .insert({
+        state,
+        user_id: user.id,
+        provider: "withings",
+        expires_at: expiresAt.toISOString(),
+      });
+
+    if (stateError) {
+      console.error("Failed to store state:", stateError);
+      return new Response(
+        JSON.stringify({ error: "Failed to generate auth state" }),
+        {
+          status: 500,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
 
     // Define the scopes needed for Withings API
     const scope = "user.info,user.metrics,user.activity";
