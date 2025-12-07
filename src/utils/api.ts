@@ -1,42 +1,29 @@
 import { supabase } from '../lib/supabase';
+import { getValidSession } from './authHelper';
 
 /**
  * Centralized API utility with Refresh-Then-Fetch pattern.
  * Implements Supabase diagnostic instructions to prevent 401 errors.
+ * Now includes poisoned token detection and hard reset capability.
  *
  * Flow:
- * 1. Force refresh session to ensure token is not expired
- * 2. Get fresh session
- * 3. Validate session exists
- * 4. Extract access_token (DO NOT use anon key for Authorization)
- * 5. Debug log token (first 20 chars)
- * 6. Make request with strict header format
+ * 1. Force refresh session to ensure token is not expired (with poisoned token protection)
+ * 2. Validate session exists
+ * 3. Extract access_token (DO NOT use anon key for Authorization)
+ * 4. Debug log token (first 20 chars)
+ * 5. Make request with strict header format
  */
 export async function callEdgeFunction(functionName: string, method: string = 'GET', body: any = null) {
   console.log(`[API] === Starting callEdgeFunction for ${functionName} ===`);
 
-  console.log('[API] Step 1: Force refreshing session...');
-  const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+  console.log('[API] Step 1: Getting valid session with poisoned token protection...');
 
-  if (refreshError) {
-    console.error('[API] Session refresh failed:', refreshError.message);
-  } else {
-    console.log('[API] Session refresh successful');
-  }
-
-  console.log('[API] Step 2: Getting current session...');
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-  if (sessionError) {
-    console.error('[API] Session error:', sessionError.message);
-    console.error('[API] No active session. Redirecting to login...');
-    window.location.href = '/';
-    throw new Error('No active session');
-  }
-
-  if (!session) {
-    console.error('[API] No active session found. Redirecting to login...');
-    window.location.href = '/';
+  let session;
+  try {
+    session = await getValidSession(true);
+    console.log('[API] Session validated successfully');
+  } catch (err: any) {
+    console.error('[API] Session validation failed:', err.message);
     throw new Error('No active session');
   }
 

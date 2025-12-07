@@ -1,13 +1,15 @@
 import { supabase } from './supabase';
+import { getValidSession } from '../utils/authHelper';
 
 /**
  * Unified helper for invoking Supabase Edge Functions with strict auth handling.
  *
  * This function:
  * 1. Always fetches a fresh session before calling
- * 2. Explicitly injects the Authorization header
- * 3. Uses Supabase's built-in functions.invoke() method
- * 4. Handles session expiration and auth errors
+ * 2. Detects and handles "poisoned tokens" with a hard reset
+ * 3. Explicitly injects the Authorization header
+ * 4. Uses Supabase's built-in functions.invoke() method
+ * 5. Handles session expiration and auth errors
  *
  * @param functionName - The name of the edge function to invoke
  * @param body - Optional request body (defaults to empty object)
@@ -21,10 +23,12 @@ export async function invokeEdgeFunction<T = any>(
   console.log(`[EdgeFn] Calling ${functionName}...`);
 
   console.log(`[EdgeFn] Refreshing session to ensure valid token...`);
-  const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
 
-  if (sessionError || !session) {
-    console.error(`[EdgeFn] Authentication required: No active session.`, sessionError);
+  let session;
+  try {
+    session = await getValidSession(true);
+  } catch (err: any) {
+    console.error(`[EdgeFn] Authentication required: No active session.`, err);
     throw new Error("Authentication required: Please log in again.");
   }
 

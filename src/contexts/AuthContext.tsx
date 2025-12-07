@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { getValidSession } from '../utils/authHelper';
 
 export interface User {
   id: string;
@@ -125,9 +126,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await loadUserProfile(session.user.id);
+    try {
+      const session = await getValidSession(false);
+      if (session?.user) {
+        await loadUserProfile(session.user.id);
+      }
+    } catch (err) {
+      console.log('No active session on mount');
     }
   };
 

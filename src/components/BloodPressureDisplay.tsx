@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Heart, Activity, Calendar, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getValidSession } from '../utils/authHelper';
 
 interface BPData {
   systolic: number;
@@ -31,7 +32,7 @@ export default function BloodPressureDisplay() {
         setError(null);
         setNeedsConnection(false);
 
-        const { data: { session } } = await supabase.auth.getSession();
+        const session = await getValidSession(false);
 
         if (!session) {
           setError('Not authenticated');
