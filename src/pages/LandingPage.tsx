@@ -52,13 +52,11 @@ const LandingPage: React.FC = () => {
   const handleAuthModalClose = () => {
     console.log('[LandingPage] Auth modal closing, setting justLoggedIn flag');
     setIsAuthModalOpen(false);
-    if (isAuthenticated) {
-      setJustLoggedIn(true);
-      setTimeout(() => {
-        console.log('[LandingPage] Clearing justLoggedIn flag');
-        setJustLoggedIn(false);
-      }, 2000);
-    }
+    setJustLoggedIn(true);
+    setTimeout(() => {
+      console.log('[LandingPage] Clearing justLoggedIn flag');
+      setJustLoggedIn(false);
+    }, 3000);
   };
 
   const features = [
