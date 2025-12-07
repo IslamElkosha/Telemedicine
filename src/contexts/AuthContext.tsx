@@ -553,9 +553,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       console.log('[AuthContext] ✓ Authentication successful for user:', authData.user.id);
 
-      console.log('[AuthContext] 🔄 Refreshing session to avoid race conditions...');
-      await supabase.auth.refreshSession();
-
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         console.error('[AuthContext] ❌ Login succeeded but no session available');
