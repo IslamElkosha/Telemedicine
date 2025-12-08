@@ -57,7 +57,7 @@ const WithingsCallbackPage: React.FC = () => {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const functionUrl = `${supabaseUrl}/functions/v1/exchange-withings-token`;
 
-      const redirectUri = `${window.location.origin}/withings-callback`;
+      const redirectUri = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
 
       const response = await fetch(functionUrl, {
         method: 'POST',

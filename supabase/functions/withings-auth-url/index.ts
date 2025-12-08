@@ -7,6 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
+const REDIRECT_URI = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
+
 Deno.serve(async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
@@ -53,21 +56,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const clientId = Deno.env.get("WITHINGS_CLIENT_ID");
-    const redirectUri = Deno.env.get("WITHINGS_REDIRECT_URI");
-
-    if (!clientId || !redirectUri) {
-      return new Response(
-        JSON.stringify({ error: "Missing Withings configuration" }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
 
     // Generate a random state for CSRF protection
     const state = crypto.randomUUID();
@@ -103,8 +91,8 @@ Deno.serve(async (req: Request) => {
     // Build the Withings OAuth authorization URL
     const authUrl = new URL("https://account.withings.com/oauth2_user/authorize2");
     authUrl.searchParams.append("response_type", "code");
-    authUrl.searchParams.append("client_id", clientId);
-    authUrl.searchParams.append("redirect_uri", redirectUri);
+    authUrl.searchParams.append("client_id", WITHINGS_CLIENT_ID);
+    authUrl.searchParams.append("redirect_uri", REDIRECT_URI);
     authUrl.searchParams.append("scope", scope);
     authUrl.searchParams.append("state", state);
 

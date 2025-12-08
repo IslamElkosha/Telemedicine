@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const WITHINGS_CLIENT_ID = '1c8b6291aea7ceaf778f9a6f3f91ac1899cba763248af8cf27d1af0950e31af3';
 const WITHINGS_AUTH_URL = 'https://account.withings.com/oauth2_user/authorize2';
+const REDIRECT_URI = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -60,11 +61,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('✅ User authenticated:', user.id);
-
-    const requestBody = await req.json().catch(() => ({}));
-    const redirectUri = requestBody.redirectUri || `${new URL(req.url).origin}/withings-callback`;
-
-    console.log('→ Redirect URI:', redirectUri);
+    console.log('→ Redirect URI (hardcoded):', REDIRECT_URI);
 
     console.log('Step 2: Delete Tokens (Client B - Service Role Bypass)');
     console.log('→ Using SERVICE_ROLE_KEY client for database write');
@@ -105,7 +102,7 @@ Deno.serve(async (req: Request) => {
     const authUrl = new URL(WITHINGS_AUTH_URL);
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('client_id', WITHINGS_CLIENT_ID);
-    authUrl.searchParams.append('redirect_uri', redirectUri);
+    authUrl.searchParams.append('redirect_uri', REDIRECT_URI);
     authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('scope', scope);
 

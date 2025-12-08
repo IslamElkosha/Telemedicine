@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2';
+const REDIRECT_URI = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -21,26 +22,24 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    let code: string, userId: string, redirectUri: string;
+    let code: string, userId: string;
 
     if (req.method === 'POST') {
       const body = await req.json();
       code = body.code;
       userId = body.userId;
-      redirectUri = body.redirectUri;
     } else {
       const url = new URL(req.url);
       code = url.searchParams.get('code') || '';
       userId = url.searchParams.get('userId') || '';
-      redirectUri = url.searchParams.get('redirectUri') || '';
     }
 
     console.log('=== WITHINGS TOKEN EXCHANGE START ===');
     console.log('User ID:', userId);
     console.log('Code present:', !!code);
-    console.log('Redirect URI:', redirectUri);
+    console.log('Redirect URI (hardcoded):', REDIRECT_URI);
 
-    if (!code || !userId || !redirectUri) {
+    if (!code || !userId) {
       console.error('Missing required parameters');
       return new Response(null, {
         status: 303,
@@ -64,7 +63,7 @@ Deno.serve(async (req: Request) => {
     console.log('Token exchange configuration:');
     console.log('  - Token URL:', WITHINGS_TOKEN_URL);
     console.log('  - Client ID:', WITHINGS_CLIENT_ID.substring(0, 15) + '...');
-    console.log('  - Redirect URI:', redirectUri);
+    console.log('  - Redirect URI:', REDIRECT_URI);
 
     const params = new URLSearchParams();
     params.append('action', 'requesttoken');
@@ -72,7 +71,7 @@ Deno.serve(async (req: Request) => {
     params.append('client_id', WITHINGS_CLIENT_ID);
     params.append('client_secret', WITHINGS_CLIENT_SECRET);
     params.append('code', code);
-    params.append('redirect_uri', redirectUri);
+    params.append('redirect_uri', REDIRECT_URI);
 
     console.log('Calling Withings API...');
     const response = await fetch(WITHINGS_TOKEN_URL, {
