@@ -41,6 +41,12 @@ Deno.serve(async (req: Request) => {
 
     if (!code || !userId) {
       console.error('Missing required parameters');
+      if (req.method === 'POST') {
+        return new Response(JSON.stringify({ success: false, error: 'Missing required parameters' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(null, {
         status: 303,
         headers: { ...corsHeaders, 'Location': '/?error=missing_parameters' }
@@ -54,6 +60,12 @@ Deno.serve(async (req: Request) => {
 
     if (!WITHINGS_CLIENT_ID || !WITHINGS_CLIENT_SECRET) {
       console.error('Missing Withings credentials');
+      if (req.method === 'POST') {
+        return new Response(JSON.stringify({ success: false, error: 'Server configuration error' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(null, {
         status: 303,
         headers: { ...corsHeaders, 'Location': '/?error=server_configuration' }
@@ -91,6 +103,12 @@ Deno.serve(async (req: Request) => {
       tokenData = JSON.parse(responseText);
     } catch (parseError) {
       console.error('Failed to parse Withings response:', parseError);
+      if (req.method === 'POST') {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid response from Withings' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(null, {
         status: 303,
         headers: { ...corsHeaders, 'Location': '/?error=invalid_withings_response' }
@@ -99,6 +117,12 @@ Deno.serve(async (req: Request) => {
 
     if (tokenData.status !== 0) {
       console.error('Withings API error:', tokenData);
+      if (req.method === 'POST') {
+        return new Response(JSON.stringify({ success: false, error: 'Withings API error: ' + (tokenData.error || 'Unknown error') }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(null, {
         status: 303,
         headers: { ...corsHeaders, 'Location': '/?error=withings_api_error' }
@@ -107,6 +131,12 @@ Deno.serve(async (req: Request) => {
 
     if (!tokenData.body?.access_token || !tokenData.body?.refresh_token) {
       console.error('Missing tokens in Withings response');
+      if (req.method === 'POST') {
+        return new Response(JSON.stringify({ success: false, error: 'Missing tokens in Withings response' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(null, {
         status: 303,
         headers: { ...corsHeaders, 'Location': '/?error=invalid_token_response' }
@@ -155,6 +185,12 @@ Deno.serve(async (req: Request) => {
       console.error('Error code:', dbError.code);
       console.error('Error message:', dbError.message);
       console.error('Error details:', dbError.details);
+      if (req.method === 'POST') {
+        return new Response(JSON.stringify({ success: false, error: 'Database error: ' + dbError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(null, {
         status: 303,
         headers: { ...corsHeaders, 'Location': '/?error=database_error' }
@@ -165,6 +201,13 @@ Deno.serve(async (req: Request) => {
     console.log('Saved record:', insertData);
     console.log('=== TOKEN EXCHANGE COMPLETE ===');
 
+    if (req.method === 'POST') {
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response(null, {
       status: 303,
       headers: { ...corsHeaders, 'Location': '/?success=device_linked' }
@@ -173,6 +216,12 @@ Deno.serve(async (req: Request) => {
     console.error('=== CRITICAL ERROR ===');
     console.error('Error:', error);
     console.error('Stack:', error.stack);
+    if (req.method === 'POST') {
+      return new Response(JSON.stringify({ success: false, error: error.message || 'Token exchange failed' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
     return new Response(null, {
       status: 303,
       headers: { ...corsHeaders, 'Location': '/?error=linking_failed' }
