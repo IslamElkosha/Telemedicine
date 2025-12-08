@@ -14,14 +14,26 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    if (req.method !== 'POST') {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Method not allowed' }),
-        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (req.method !== 'POST' && req.method !== 'GET') {
+      return new Response(null, {
+        status: 303,
+        headers: { ...corsHeaders, 'Location': '/?error=method_not_allowed' }
+      });
     }
 
-    const { code, userId, redirectUri } = await req.json();
+    let code: string, userId: string, redirectUri: string;
+
+    if (req.method === 'POST') {
+      const body = await req.json();
+      code = body.code;
+      userId = body.userId;
+      redirectUri = body.redirectUri;
+    } else {
+      const url = new URL(req.url);
+      code = url.searchParams.get('code') || '';
+      userId = url.searchParams.get('userId') || '';
+      redirectUri = url.searchParams.get('redirectUri') || '';
+    }
 
     console.log('=== WITHINGS TOKEN EXCHANGE START ===');
     console.log('User ID:', userId);
@@ -30,10 +42,10 @@ Deno.serve(async (req: Request) => {
 
     if (!code || !userId || !redirectUri) {
       console.error('Missing required parameters');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing code, userId, or redirectUri' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(null, {
+        status: 303,
+        headers: { ...corsHeaders, 'Location': '/?error=missing_parameters' }
+      });
     }
 
     const WITHINGS_CLIENT_ID = Deno.env.get('WITHINGS_CLIENT_ID');
@@ -43,10 +55,10 @@ Deno.serve(async (req: Request) => {
 
     if (!WITHINGS_CLIENT_ID || !WITHINGS_CLIENT_SECRET) {
       console.error('Missing Withings credentials');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Server configuration error' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(null, {
+        status: 303,
+        headers: { ...corsHeaders, 'Location': '/?error=server_configuration' }
+      });
     }
 
     console.log('Token exchange configuration:');
@@ -80,29 +92,26 @@ Deno.serve(async (req: Request) => {
       tokenData = JSON.parse(responseText);
     } catch (parseError) {
       console.error('Failed to parse Withings response:', parseError);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid response from Withings' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(null, {
+        status: 303,
+        headers: { ...corsHeaders, 'Location': '/?error=invalid_withings_response' }
+      });
     }
 
     if (tokenData.status !== 0) {
       console.error('Withings API error:', tokenData);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Withings API error: ${tokenData.error || 'Unknown error'}`,
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(null, {
+        status: 303,
+        headers: { ...corsHeaders, 'Location': '/?error=withings_api_error' }
+      });
     }
 
     if (!tokenData.body?.access_token || !tokenData.body?.refresh_token) {
       console.error('Missing tokens in Withings response');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid token response' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(null, {
+        status: 303,
+        headers: { ...corsHeaders, 'Location': '/?error=invalid_token_response' }
+      });
     }
 
     console.log('=== TOKEN EXCHANGE SUCCESS ===');
@@ -147,36 +156,27 @@ Deno.serve(async (req: Request) => {
       console.error('Error code:', dbError.code);
       console.error('Error message:', dbError.message);
       console.error('Error details:', dbError.details);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Database error: ${dbError.message}`,
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(null, {
+        status: 303,
+        headers: { ...corsHeaders, 'Location': '/?error=database_error' }
+      });
     }
 
     console.log('=== DATABASE SAVE SUCCESS ===');
     console.log('Saved record:', insertData);
     console.log('=== TOKEN EXCHANGE COMPLETE ===');
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Withings account linked successfully',
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(null, {
+      status: 303,
+      headers: { ...corsHeaders, 'Location': '/?success=device_linked' }
+    });
   } catch (error: any) {
     console.error('=== CRITICAL ERROR ===');
     console.error('Error:', error);
     console.error('Stack:', error.stack);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || 'Internal server error',
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(null, {
+      status: 303,
+      headers: { ...corsHeaders, 'Location': '/?error=linking_failed' }
+    });
   }
 });
