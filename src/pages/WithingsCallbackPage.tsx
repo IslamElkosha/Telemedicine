@@ -73,15 +73,31 @@ const WithingsCallbackPage: React.FC = () => {
         }),
       });
 
+      console.log('[WithingsCallback] Response status:', response.status);
+      console.log('[WithingsCallback] Response ok:', response.ok);
+
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Token exchange failed: ${errorText}`);
+        console.error('[WithingsCallback] HTTP Error Response:', errorText);
+        let parsedError;
+        try {
+          parsedError = JSON.parse(errorText);
+          console.error('[WithingsCallback] Parsed error:', parsedError);
+        } catch (e) {
+          console.error('[WithingsCallback] Could not parse error response');
+        }
+        throw new Error(`Token exchange failed (${response.status}): ${parsedError?.error || errorText}`);
       }
 
       const result = await response.json();
+      console.log('[WithingsCallback] Result:', result);
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to link Withings account');
+        const errorDetails = result.code ? `[${result.code}] ` : '';
+        const errorHint = result.hint ? ` Hint: ${result.hint}` : '';
+        const errorMessage = `${errorDetails}${result.error || 'Failed to link Withings account'}${errorHint}`;
+        console.error('[WithingsCallback] Exchange failed:', errorMessage);
+        throw new Error(errorMessage);
       }
 
       setStatus('success');
@@ -92,12 +108,9 @@ const WithingsCallbackPage: React.FC = () => {
       }, 2000);
     } catch (error: any) {
       console.error('[WithingsCallback] Error:', error);
+      console.error('[WithingsCallback] Error stack:', error.stack);
       setStatus('error');
       setMessage(error.message || 'Failed to link Withings account');
-
-      setTimeout(() => {
-        navigate('/patient/devices');
-      }, 3000);
     }
   };
 
@@ -129,9 +142,15 @@ const WithingsCallbackPage: React.FC = () => {
               <div className="bg-red-100 rounded-full p-3">
                 <XCircle className="h-12 w-12 text-red-600" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-900">Error</h2>
-              <p className="text-gray-600">{message}</p>
-              <p className="text-sm text-gray-500">Redirecting back to devices page...</p>
+              <h2 className="text-xl font-semibold text-gray-900">Connection Failed</h2>
+              <p className="text-gray-600 text-sm break-words">{message}</p>
+              <button
+                onClick={() => navigate('/patient/devices')}
+                className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Return to Devices
+              </button>
+              <p className="text-xs text-gray-500 mt-2">Check the browser console for detailed logs</p>
             </>
           )}
         </div>

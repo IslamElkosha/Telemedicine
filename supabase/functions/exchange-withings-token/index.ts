@@ -165,15 +165,22 @@ Deno.serve(async (req: Request) => {
       withings_userid: tokenData.body.userid?.toString() || 'unknown',
       access_token: tokenData.body.access_token,
       refresh_token: tokenData.body.refresh_token,
-      expires_at: expiresAt,
       expires_in: expiresIn,
       scope: tokenData.body.scope || '',
+      updated_at: new Date().toISOString(),
     };
 
     console.log('=== SAVING TO DATABASE ===');
-    console.log('User ID:', userId);
-    console.log('Withings User ID:', tokenRecord.withings_userid);
-    console.log('Expires at:', expiresAt);
+    console.log('Token Record to Save:');
+    console.log('  - User ID:', userId);
+    console.log('  - User ID Type:', typeof userId);
+    console.log('  - Withings User ID:', tokenRecord.withings_userid);
+    console.log('  - Expires In:', expiresIn);
+    console.log('  - Scope:', tokenRecord.scope);
+    console.log('  - Access Token (first 20 chars):', tokenRecord.access_token.substring(0, 20) + '...');
+    console.log('  - Refresh Token (first 20 chars):', tokenRecord.refresh_token.substring(0, 20) + '...');
+
+    console.log('Attempting upsert with SERVICE_ROLE_KEY (bypasses RLS)...');
 
     const { data: insertData, error: dbError } = await supabaseAdmin
       .from('withings_tokens')
@@ -184,9 +191,17 @@ Deno.serve(async (req: Request) => {
       console.error('=== DATABASE ERROR ===');
       console.error('Error code:', dbError.code);
       console.error('Error message:', dbError.message);
-      console.error('Error details:', dbError.details);
+      console.error('Error details:', JSON.stringify(dbError.details, null, 2));
+      console.error('Error hint:', dbError.hint);
+      console.error('Full error object:', JSON.stringify(dbError, null, 2));
       if (req.method === 'POST') {
-        return new Response(JSON.stringify({ success: false, error: 'Database error: ' + dbError.message }), {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Database error: ' + dbError.message,
+          code: dbError.code,
+          details: dbError.details,
+          hint: dbError.hint
+        }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -198,7 +213,24 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('=== DATABASE SAVE SUCCESS ===');
-    console.log('Saved record:', insertData);
+    console.log('Saved record count:', insertData?.length || 0);
+    console.log('Saved record:', JSON.stringify(insertData, null, 2));
+
+    console.log('Verifying token was saved...');
+    const { data: verifyData, error: verifyError } = await supabaseAdmin
+      .from('withings_tokens')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (verifyError) {
+      console.error('❌ Verification read failed:', verifyError);
+    } else if (!verifyData) {
+      console.error('❌ Token not found after upsert!');
+    } else {
+      console.log('✅ Token verified in database:', verifyData.id);
+    }
+
     console.log('=== TOKEN EXCHANGE COMPLETE ===');
 
     if (req.method === 'POST') {
