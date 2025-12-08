@@ -119,7 +119,7 @@ const validateLicense = (license: string): { isValid: boolean; message?: string 
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     checkUser();
@@ -127,12 +127,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const checkUser = async () => {
     try {
+      setLoading(true);
       const session = await getValidSession(false);
       if (session?.user) {
         await loadUserProfile(session.user.id);
       }
     } catch (err) {
       console.log('No active session on mount');
+    } finally {
+      setLoading(false);
     }
   };
 

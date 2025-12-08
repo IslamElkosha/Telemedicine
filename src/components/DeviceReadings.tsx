@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Activity, Thermometer, Bluetooth, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DeviceReading {
   deviceType: string;
@@ -22,15 +23,30 @@ interface BPData {
 }
 
 const DeviceReadings: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
   const [readings, setReadings] = useState<DeviceReading[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) {
+      console.log('[DeviceReadings] Waiting for auth session to load...');
+      return;
+    }
+
+    if (!user) {
+      console.log('[DeviceReadings] No user logged in');
+      setReadings(getEmptyReadings());
+      return;
+    }
+
+    console.log('[DeviceReadings] Auth session loaded, fetching data...');
     fetchLatestBPReading();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      fetchLatestBPReading();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        fetchLatestBPReading();
+      }
     });
 
     const channel = supabase
@@ -53,7 +69,7 @@ const DeviceReadings: React.FC = () => {
       subscription?.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user, authLoading]);
 
   const fetchLatestBPReading = async () => {
     try {
@@ -215,12 +231,47 @@ const DeviceReadings: React.FC = () => {
   };
 
   console.log('=== [DeviceReadings] RENDER CYCLE ===');
+  console.log('Auth loading:', authLoading);
   console.log('Loading state:', loading);
   console.log('Error state:', error);
   console.log('Readings state:', JSON.stringify(readings, null, 2));
 
+  if (authLoading) {
+    console.log('[DeviceReadings] Rendering AUTH LOADING state');
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Live Device Readings</h3>
+        </div>
+        <div className="p-6">
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="h-6 w-6 text-blue-600 animate-spin" />
+            <span className="ml-2 text-gray-600">Loading user session...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    console.log('[DeviceReadings] Rendering NO USER state');
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Live Device Readings</h3>
+        </div>
+        <div className="p-6">
+          <div className="flex items-center justify-center py-8">
+            <AlertCircle className="h-6 w-6 text-gray-600" />
+            <span className="ml-2 text-gray-600">Please log in to view readings.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
-    console.log('[DeviceReadings] Rendering LOADING state');
+    console.log('[DeviceReadings] Rendering DATA LOADING state');
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
