@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { getValidSession } from '../utils/authHelper';
 
 const WithingsCallbackPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -16,9 +15,16 @@ const WithingsCallbackPage: React.FC = () => {
 
   const handleCallback = async () => {
     try {
+      console.log('[WithingsCallback] === CALLBACK STARTED ===');
+      console.log('[WithingsCallback] URL:', window.location.href);
+
       const code = searchParams.get('code');
       const state = searchParams.get('state');
       const error = searchParams.get('error');
+
+      console.log('[WithingsCallback] Code present:', !!code);
+      console.log('[WithingsCallback] State present:', !!state);
+      console.log('[WithingsCallback] Error param:', error);
 
       if (error) {
         throw new Error(`Withings authorization failed: ${error}`);
@@ -29,6 +35,7 @@ const WithingsCallbackPage: React.FC = () => {
       }
 
       const savedState = sessionStorage.getItem('withings_auth_state');
+      console.log('[WithingsCallback] Saved state matches:', savedState === state);
 
       if (!savedState || savedState !== state) {
         throw new Error('State mismatch - possible CSRF attack');
@@ -38,26 +45,30 @@ const WithingsCallbackPage: React.FC = () => {
 
       setMessage('Restoring session...');
 
-      let session;
-      try {
-        session = await getValidSession(true);
-      } catch (sessionError) {
-        console.error('Session refresh failed, trying getSession:', sessionError);
-        const { data: { session: fallbackSession } } = await supabase.auth.getSession();
+      console.log('[WithingsCallback] Getting session from localStorage...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (!fallbackSession) {
-          throw new Error('Session expired. Please log in again and retry linking.');
-        }
-
-        session = fallbackSession;
+      if (sessionError) {
+        console.error('[WithingsCallback] Session error:', sessionError);
+        throw new Error(`Session error: ${sessionError.message}`);
       }
+
+      if (!session) {
+        console.error('[WithingsCallback] No session found');
+        throw new Error('Session expired. Please log in and try connecting again.');
+      }
+
+      console.log('[WithingsCallback] Session found for user:', session.user.id);
 
       setMessage('Exchanging authorization code for access tokens...');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const functionUrl = `${supabaseUrl}/functions/v1/exchange-withings-token`;
+      const redirectUri = import.meta.env.VITE_WITHINGS_REDIRECT_URI;
 
-      const redirectUri = 'https://comprehensive-teleme-pbkl.bolt.host/withings-callback';
+      console.log('[WithingsCallback] Calling edge function:', functionUrl);
+      console.log('[WithingsCallback] User ID:', session.user.id);
+      console.log('[WithingsCallback] Redirect URI:', redirectUri);
 
       const response = await fetch(functionUrl, {
         method: 'POST',
