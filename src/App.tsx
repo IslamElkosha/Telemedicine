@@ -20,6 +20,7 @@ import PatientDevicesPage from './pages/PatientDevicesPage';
 import DiagnosticsPage from './pages/DiagnosticsPage';
 import PatientWithingsDataPage from './pages/PatientWithingsDataPage';
 import WithingsCallbackPage from './pages/WithingsCallbackPage';
+import WithingsDebugPage from './pages/WithingsDebugPage';
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
                   <Route path="/doctor/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
                   <Route path="/technician/patient/:patientId/withings" element={<PatientWithingsDataPage />} />
                   <Route path="/withings-callback" element={<WithingsCallbackPage />} />
+                  <Route path="/withings-debug" element={<WithingsDebugPage />} />
                 </Routes>
               </div>
             </Router>
