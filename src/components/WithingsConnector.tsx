@@ -160,6 +160,11 @@ const WithingsConnector: React.FC = () => {
 
       console.log('[WithingsConnect] Force relink successful. Tokens deleted:', result.tokensDeleted);
       console.log('[WithingsConnect] Authorization URL:', result.authUrl);
+      console.log('[WithingsConnect] State:', result.state);
+
+      sessionStorage.setItem('withings_auth_state', result.state);
+      console.log('[WithingsConnect] State saved to sessionStorage');
+
       console.log('[WithingsConnect] Redirecting to Withings authorization page...');
       window.location.href = result.authUrl;
     } catch (err: any) {
