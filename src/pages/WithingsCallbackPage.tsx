@@ -45,20 +45,38 @@ const WithingsCallbackPage: React.FC = () => {
 
       setMessage('Restoring session...');
 
-      console.log('[WithingsCallback] Getting session from localStorage...');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('[WithingsCallback] Getting session and refreshing if needed...');
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
 
-      if (sessionError) {
-        console.error('[WithingsCallback] Session error:', sessionError);
-        throw new Error(`Session error: ${sessionError.message}`);
-      }
-
-      if (!session) {
-        console.error('[WithingsCallback] No session found');
+      if (!currentSession) {
+        console.error('[WithingsCallback] No session in localStorage');
         throw new Error('Session expired. Please log in and try connecting again.');
       }
 
-      console.log('[WithingsCallback] Session found for user:', session.user.id);
+      const expiresAt = currentSession.expires_at || 0;
+      const now = Math.floor(Date.now() / 1000);
+      const timeUntilExpiry = expiresAt - now;
+
+      console.log('[WithingsCallback] Token expires in:', timeUntilExpiry, 'seconds');
+
+      let session = currentSession;
+
+      if (timeUntilExpiry < 300) {
+        console.log('[WithingsCallback] Token expiring soon, refreshing...');
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+
+        if (refreshError || !refreshedSession) {
+          console.error('[WithingsCallback] Refresh failed:', refreshError);
+          throw new Error('Session expired. Please log in and try connecting again.');
+        }
+
+        session = refreshedSession;
+        console.log('[WithingsCallback] Session refreshed successfully');
+      } else {
+        console.log('[WithingsCallback] Token still valid, using current session');
+      }
+
+      console.log('[WithingsCallback] Using session for user:', session.user.id);
 
       setMessage('Exchanging authorization code for access tokens...');
 
